@@ -23,8 +23,8 @@
             "total": 1.33
         },
         "TSP": {
-            "icar": 0.75,
-            "state": 0.25,
+            "icar": 1.0,
+            "state": 0.0,
             "total": 1.0
         }
     },
