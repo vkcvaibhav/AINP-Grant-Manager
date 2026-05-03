@@ -23,11 +23,10 @@ for d in DIRS:
 # AI Setup
 api_key = st.secrets.get("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
-model_pro = genai.GenerativeModel('gemini-3.1-pro-preview')   
+model_pro = genai.GenerativeModel('gemini-1.5-pro-latest')   
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
-# FIXED THE TYPO HERE TO PREVENT THE CRASH
 ICAR_LOGO = 'logos/icar_logo.png' if os.path.exists('logos/icar_logo.png') else None
 GUJARATI_FONT = 'fonts/NotoSansGujarati-Regular.ttf'
 
@@ -533,18 +532,9 @@ def main():
         if email_file and pfms_file and st.button("Analyze & Process Installment"):
             with st.spinner("Analyzing Email and PFMS documents..."):
                 
-                # Extract text locally since we are passing 2 files
-                email_text = ""
-                with pdfplumber.open(email_file) as pdf:
-                    for page in pdf.pages:
-                        email_text += page.extract_text() + "\n"
-                        
-                pfms_text = ""
-                with pdfplumber.open(pfms_file) as pdf:
-                    for page in pdf.pages:
-                        pfms_text += page.extract_text() + "\n"
-                        
-                combined_text = f"--- EMAIL CONTENT ---\n{email_text}\n\n--- PFMS CONTENT ---\n{pfms_text}"
+                # Use Gemini Native PDF reading for BOTH files
+                pdf_data_email = {"mime_type": "application/pdf", "data": email_file.getvalue()}
+                pdf_data_pfms = {"mime_type": "application/pdf", "data": pfms_file.getvalue()}
                 
                 full_prompt = f"""
                 Analyze the provided Email and PFMS documents and extract the installment information.
@@ -564,7 +554,7 @@ def main():
                 """
                 
                 try:
-                    response = model_pro.generate_content(full_prompt + "\n\n" + combined_text)
+                    response = model_pro.generate_content([full_prompt, pdf_data_email, pdf_data_pfms])
                     json_str = response.text.replace('```json', '').replace('```', '').strip()
                     extracted_inst = json.loads(json_str)
                     st.session_state['pending_installment'] = extracted_inst
@@ -576,7 +566,7 @@ def main():
         if 'pending_installment' in st.session_state:
             extracted = st.session_state['pending_installment']
             
-            # Determine Quarter
+            # Determine Quarter based on strict rules
             try:
                 dt_obj = datetime.strptime(extracted['date'], "%Y-%m-%d")
                 m = dt_obj.month
@@ -787,7 +777,7 @@ def main():
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
 
-    # --- TAB 6: AI Chatbot ---
+    # --- TAB 6: AI CHATBOT ---
     with tabs[5]:
         st.header("Grant Smart-Assistant")
         st.write("Ask questions like: *'How much is remaining in ORC Recurring?'* or *'Generate a summary of spend for Quarter 3'*.")
