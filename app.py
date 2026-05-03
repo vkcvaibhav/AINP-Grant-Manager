@@ -682,7 +682,7 @@ def main():
                                         st.download_button("📥 Download PFMS PDF", f, file_name=f"{inst['pfms_id']}_PFMS.pdf", key=f"dl_p_{inst['pfms_id']}")
                             st.divider()
             
-            # --- NEW ADDITION: SUMMARY TABLE ---
+            # --- SUMMARY TABLE ---
             st.divider()
             st.subheader("📊 Summary of Received Installments (Q1 - Q4)")
             
@@ -700,7 +700,6 @@ def main():
             df_summary = pd.DataFrame.from_dict(summary_data, orient='index')
             df_summary.loc['GRAND TOTAL'] = df_summary.sum(numeric_only=True)
             st.dataframe(df_summary, use_container_width=True)
-            # --- END NEW ADDITION ---
 
         else:
             st.info("No installments recorded yet.")
@@ -708,7 +707,7 @@ def main():
     # --- TAB 4: GENERATED LETTERS ---
     with tabs[3]:
         st.header("Draft Letters based on PFMS Receipts")
-        st.write("Generate the Gujarati letter (image_8.png template) to send to Comptroller.")
+        st.write("Generate the Gujarati letter to send to Comptroller.")
         
         pending_utilization = [inst for inst in data['installments'] if not inst.get('utilization_letter_generated')]
         
@@ -717,18 +716,71 @@ def main():
             selected_inst_str = st.selectbox("Select PFMS Receipt to draft letter for:", list(options.keys()))
             selected_inst_data = options[selected_inst_str]
 
-            if st.button("Draft Letter in Gujarati (PDF)"):
-                with st.spinner("Generating PDF based on template..."):
-                    pdf_bytes = generate_comptroller_letter(data, selected_inst_data)
-                    
-                    if pdf_bytes:
-                        st.success("Draft Generated!")
-                        st.download_button(
-                            label="Download Comptroller Letter (A4 PDF)",
-                            data=pdf_bytes,
-                            file_name=f"Letter_to_Comptroller_{selected_inst_data['type']}_{selected_inst_data['pfms_id']}.pdf",
-                            mime="application/pdf"
-                        )
+            # Extract heads for the template
+            inst_heads = selected_inst_data.get('heads', {})
+            pay_amt = inst_heads.get('Pay and Allowances', 0)
+            rec_amt = inst_heads.get('Other Recurring Contingencies (ORC)', 0)
+            non_rec_amt = inst_heads.get('Non-Recurring Contingencies (Equipments/Works)', 0)
+            total_amt = selected_inst_data.get('amount', 0)
+
+            today_str = datetime.now().strftime("%d/%m/%Y")
+
+            default_letter = f"""કીટકશાસ્ત્ર વિભાગ
+ન. મ. કૃષિ મહાવિદ્યાલય
+નવસારી કૃષિ યુનિવર્સિટી
+નવસારી- ૩૯૬ ૪૫૦ (ગુજરાત)
+
+ડૉ. જે. જે. પસ્તાગિયા
+પ્રાધ્યાપક અને વડા (ઈ/ચા.)
+મોબાઇલ: +૯૧ ૯૮૭૯૦ ૩૮૫૩૯
+ઇમેલ: headentonau@gmail.com
+
+જા.નં. એસીએન/એન્ટો/       /૨૦૨૬, નવસારી
+તારીખ: {today_str}
+
+પ્રતિ,
+હિસાબ નિયામકશ્રી
+નવસારી કૃષિ યુનિવર્સિટી
+નવસારી- ૩૯૬ ૪૫૦
+
+મારફત સવિનય: આચાર્ય અને ડિનશ્રી , ન. મ. કૃષિ મહાવિદ્યાલય, ન.કૃ.યુ., નવસારી ૩૯૬ ૪૫૦
+
+વિષય:- બ.સ. ૩૦૩/ ૨૦૯૨ અને ૩૦૩/ ૨૦૯૨/A માં ICAR – NCIPM તરફથી આવેલ ગ્રાન્ટ ફાળવવા બાબત...
+
+જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે ચાલતી આઈ.સી.એ.આર. યોજના AINP on Agricultural Acarology (75:25%) (BH.303/2092) માં આવેલ ગ્રાન્ટને કોષ્ટકમાં જણાવ્યાનુસાર ફાળવી આપવા આપ સાહેબશ્રીને નમ્ર વિનંતી.
+
+Name of Centre (Scheme): AINP on Agril Acarology (BH.303/2092)
+Pay And allowance: {pay_amt}/-
+Recurring Contingencies: {rec_amt}/-
+Non-Recurring Contingencies: {non_rec_amt}/-
+Total Amount: {total_amt}/-
+
+In Rupees: ______________________ only.
+
+સામેલ: ઉપર મુજબ
+પ્રોજેક્ટ ઈન્ચાર્જ                                                                                                                     પ્રાધ્યાપક અને વડા"""
+
+            st.write("✏️ **Preview and Edit Letter Text:**")
+            edited_letter = st.text_area("You can edit the text below manually before downloading.", value=default_letter, height=450)
+            
+            is_approved = st.checkbox("✅ I approve this letter format and content.")
+            
+            if is_approved:
+                # Generate DOCX
+                doc = Document()
+                for para in edited_letter.split('\n'):
+                    doc.add_paragraph(para)
+                
+                doc_io = io.BytesIO()
+                doc.save(doc_io)
+                doc_io.seek(0)
+                
+                st.download_button(
+                    label="📥 Download Approved Letter (.docx)",
+                    data=doc_io,
+                    file_name=f"Letter_to_Comptroller_{selected_inst_data['type']}_{selected_inst_data['pfms_id']}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
         else:
             st.info("No pending PFMS receipts to generate letters for.")
 
