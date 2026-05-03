@@ -12,7 +12,7 @@ import io
 from github import Github  # <-- Added for GitHub backups
 
 # --- 1. CONFIGURATION & SETUP ---
-st.set_page_config(page_title="AINP Grant Management System", page_icon="🌾", layout="wide")
+st.set_page_config(page_title="AINP Grant Manager", page_icon="🌾", layout="wide")
 
 # Directory Setup
 DIRS = ['data', 'documents', 'fonts', 'logos']
@@ -23,11 +23,11 @@ for d in DIRS:
 # AI Setup
 api_key = st.secrets.get("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
-model_pro = genai.GenerativeModel('gemini-3.1-pro-preview')   
+model_pro = genai.GenerativeModel('gemini-1.5-pro-latest')   
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
-ICAR_LOGO = 'logos/icar_logo.png' if os.path.exists('icar_logo.png') else None
+ICAR_LOGO = 'logos/icar_logo.png' if os.path.exists('logos/icar_logo.png') else None
 GUJARATI_FONT = 'fonts/NotoSansGujarati-Regular.ttf'
 
 # Define standard Heads
@@ -42,22 +42,26 @@ BUDGET_HEADS = [
 # --- 2. HELPER FUNCTIONS ---
 
 # --- A. Data Persistence & GitHub Backup ---
-def backup_to_github(filepath, content):
-    """Pushes saved data/PDFs back to GitHub so it isn't lost when Streamlit sleeps."""
+def backup_to_github(filepath, content_str):
+    """Pushes saved data back to GitHub so it isn't lost when Streamlit sleeps."""
     github_token = st.secrets.get("GITHUB_TOKEN")
     
     if not github_token:
+        # If no token is found, just skip the backup (useful for local testing)
         return
 
     try:
         g = Github(github_token)
         repo = g.get_repo("vkcvaibhav/AINP-Grant-Manager") # Your exact repo name
         
+        # Check if the file already exists in GitHub
         try:
             contents = repo.get_contents(filepath)
-            repo.update_file(contents.path, f"Auto-backup {filepath}", content, contents.sha)
+            # If it exists, UPDATE it
+            repo.update_file(contents.path, f"Auto-backup {filepath}", content_str, contents.sha)
         except Exception:
-            repo.create_file(filepath, f"Auto-create {filepath}", content)
+            # If it does not exist yet, CREATE it
+            repo.create_file(filepath, f"Auto-create {filepath}", content_str)
             
     except Exception as e:
         st.warning(f"Failed to backup to GitHub. Error: {e}")
@@ -70,11 +74,9 @@ def load_data(fy):
     if os.path.exists(filename):
         with open(filename, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            # Ensure new structures exist in older save files
+            # Ensure new quarterly structure exists in old data files
             if 'quarterly_allocations' not in data:
                 data['quarterly_allocations'] = {"Q1": {}, "Q2": {}, "Q3": {}, "Q4": {}}
-            if 'pdfs' not in data:
-                data['pdfs'] = {}
             return data
     else:
         return {
@@ -84,7 +86,6 @@ def load_data(fy):
             "quarterly_allocations": {"Q1": {}, "Q2": {}, "Q3": {}, "Q4": {}},
             "installments": [], 
             "expenditure": [],
-            "pdfs": {}, # To store the paths of uploaded PDFs
             "latest_quarter": "Full Year", 
             "latest_date": "N/A"
         }
@@ -105,6 +106,7 @@ def save_data(data, fy):
 def process_upload_with_ai(uploaded_file, prompt_task):
     """Uses Gemini to natively read the PDF and extract JSON structured data."""
     try:
+        # Package the raw PDF file directly for Gemini
         pdf_data = {
             "mime_type": "application/pdf",
             "data": uploaded_file.getvalue()
@@ -117,12 +119,14 @@ def process_upload_with_ai(uploaded_file, prompt_task):
         DOCUMENT TYPE/CONTEXT: {prompt_task['context']}
         REQUIRED JSON STRUCTURE: {json.dumps(prompt_task['structure'], indent=2)}
 
-        IMPORTANT: Only return the JSON object, nothing else. If a field cannot be found, set it to 0.
+        IMPORTANT: Only return the JSON object, nothing else. If a field cannot be found, set it to null.
         For currency, return numbers only (e.g., 100000). Convert dates to YYYY-MM-DD format.
         """
         
+        # Send the text prompt and the raw PDF directly to Gemini
         response = model_pro.generate_content([full_prompt, pdf_data])
         
+        # Parse JSON from response (MUST BE ON ONE LINE)
         json_str = response.text.replace('```json', '').replace('```', '').strip()
         extracted_data = json.loads(json_str)
         return extracted_data
@@ -256,76 +260,87 @@ def main():
     with tabs[0]:
         st.header(f"Financial Year {selected_fy}")
         
+        # Display Quarter and Date Info
         current_qtr = data.get('latest_quarter', 'Full Year')
         last_date = data.get('latest_date', 'N/A')
         st.markdown(f"**Current Active Budget Period:** {current_qtr} | **Last Document Date:** {last_date}")
         
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            total_allocated = sum(v.get('total', 0) for k,v in data['revised_allocation'].items()) if data['revised_allocation'] else 0
+            st.metric("Total Sanctioned Budget", f"₹{total_allocated:,}")
+        with col2:
+            total_received = sum(inst['amount'] for inst in data['installments'])
+            st.metric("Total Funds Received (PFMS)", f"₹{total_received:,}")
+        with col3:
+            st.metric("Pending Received", "Calculated later")
+            
         # 1. Show Document Data Blocks (Clickable Expanders)
         st.divider()
         st.subheader("📑 Uploaded Budget Documents")
         
-        # Helper to render a table with a Total row and PDF download button
-        def render_budget_expander(title, dict_data, doc_key):
-            with st.expander(title):
-                df = pd.DataFrame.from_dict(dict_data, orient='index')
-                df.loc['Total'] = df.sum(numeric_only=True)
-                st.dataframe(df, use_container_width=True)
-                
-                # Check for PDF
-                pdf_path = data.get('pdfs', {}).get(doc_key)
-                if pdf_path and os.path.exists(pdf_path):
-                    with open(pdf_path, "rb") as f:
-                        st.download_button(f"📥 Download {doc_key} PDF", f, file_name=pdf_path.split('/')[-1], mime="application/pdf", key=f"dl_{doc_key}")
-        
+        # Helper to neatly display dataframes with TOTAL rows
+        def display_budget_df(b_dict):
+            df = pd.DataFrame.from_dict(b_dict, orient='index')
+            df.loc['TOTAL'] = df.sum(numeric_only=True)
+            st.dataframe(df, use_container_width=True)
+
         col_a, col_b = st.columns(2)
         with col_a:
             if data.get('allocation'):
-                render_budget_expander("📄 Initial Full-Year Budget Allocation", data['allocation'], "Initial Allocation")
+                with st.expander("📄 Initial Full-Year Budget Allocation"):
+                    display_budget_df(data['allocation'])
         with col_b:
             if data.get('revised_allocation'):
-                render_budget_expander("📄 Revised Full-Year Budget Allocation", data['revised_allocation'], "Revised Allocation")
+                with st.expander("📄 Revised Full-Year Budget Allocation"):
+                    display_budget_df(data['revised_allocation'])
                     
-        st.markdown("<br><b>🗓️ Quarterly Releases (Click to view data & PDFs)</b>", unsafe_allow_html=True)
+        st.write("📅 **Quarterly Releases (Click to view data)**")
         q_cols = st.columns(4)
         for i, q in enumerate(["Q1", "Q2", "Q3", "Q4"]):
             q_data = data['quarterly_allocations'].get(q)
             if q_data:
                 with q_cols[i]:
-                    render_budget_expander(f"📄 {q} Release", q_data, f"{q} Release")
+                    with st.expander(f"📄 {q} Release Data"):
+                        display_budget_df(q_data)
                         
         st.divider()
         
         # 2. Total Mismatch/Status Table
-        active_budget = data.get('revised_allocation') if data.get('revised_allocation') else data.get('allocation')
+        active_budget = data.get('revised_allocation') or data.get('allocation')
         if active_budget:
             st.subheader("⚖️ Allocation vs. Quarterly Release Mismatch")
             mismatch_data = {}
             
+            # Force standard order
             for head in BUDGET_HEADS:
-                # Get Sanctioned Total for the head
-                tot_alloc = active_budget.get(head, {}).get('total', 0.0)
+                vals = active_budget.get(head, {})
+                tot_alloc = vals.get('total', 0)
                 
                 # Sum the quarterly totals for this specific head
-                q_sum = 0.0
+                q_sum = 0
                 for q in ["Q1", "Q2", "Q3", "Q4"]:
                     if data['quarterly_allocations'].get(q):
-                        q_sum += data['quarterly_allocations'][q].get(head, {}).get('total', 0.0)
+                        q_sum += data['quarterly_allocations'][q].get(head, {}).get('total', 0)
                         
                 mismatch = tot_alloc - q_sum
-                mismatch_data[head] = {
-                    "Total Sanctioned (Lakhs)": round(tot_alloc, 2),
-                    "Released Q1-Q4 (Lakhs)": round(q_sum, 2),
-                    "Pending/Mismatch (Lakhs)": round(mismatch, 2)
-                }
+                
+                # Only show rows if there is allocated budget OR if money was mysteriously released for it
+                if tot_alloc > 0 or q_sum > 0:
+                    mismatch_data[head] = {
+                        "Total Sanctioned (Lakhs)": round(tot_alloc, 2),
+                        "Released Q1-Q4 (Lakhs)": round(q_sum, 2),
+                        "Pending/Mismatch (Lakhs)": round(mismatch, 2)
+                    }
             
-            # Create DataFrame and add Grand Total row
-            df_mismatch = pd.DataFrame.from_dict(mismatch_data, orient='index')
-            df_mismatch.loc['Grand Total'] = df_mismatch.sum()
-            
-            # Display Table
-            st.dataframe(df_mismatch, use_container_width=True)
+            if mismatch_data:
+                df_mismatch = pd.DataFrame.from_dict(mismatch_data, orient='index')
+                df_mismatch.loc['TOTAL'] = df_mismatch.sum(numeric_only=True)
+                st.dataframe(df_mismatch, use_container_width=True)
+            else:
+                st.info("No allocated budget values to show yet.")
         else:
-            st.info("Upload an Initial or Revised Budget Allocation to view the Mismatch Table.")
+            st.info("Upload budget allocation to view Mismatch Table.")
 
     # --- TAB 2: BUDGET INTAKE ---
     with tabs[1]:
@@ -353,16 +368,12 @@ def main():
             with st.spinner(f"AI is analyzing {doc_type} PDF..."):
                 
                 budget_prompt = {
-                    "context": f"Document Type: {doc_type}. Scheme: AICRP/AINP Acarology. Financial Year: {selected_fy}. Extract the budget allocation table strictly using the exact 5 heads defined.",
+                    "context": f"Document Type: {doc_type}. Scheme: AICRP/AINP Acarology. Financial Year: {selected_fy}. Extract the budget allocation table. IMPORTANT: Map the head names exactly to: 'Pay and Allowances', 'Travelling Allowances (TA)', 'Other Recurring Contingencies (ORC)', 'Non-Recurring Contingencies (Equipments/Works)', 'TSP'.",
                     "structure": {
                         "is_revision": "boolean (true if this revises a previous allocation)",
                         "date": "YYYY-MM-DD",
                         "heads": [
-                            {"head_name": "Pay and Allowances", "icar_share": 0.0, "state_share": 0.0, "total": 0.0},
-                            {"head_name": "Travelling Allowances (TA)", "icar_share": 0.0, "state_share": 0.0, "total": 0.0},
-                            {"head_name": "Other Recurring Contingencies (ORC)", "icar_share": 0.0, "state_share": 0.0, "total": 0.0},
-                            {"head_name": "Non-Recurring Contingencies (Equipments/Works)", "icar_share": 0.0, "state_share": 0.0, "total": 0.0},
-                            {"head_name": "TSP", "icar_share": 0.0, "state_share": 0.0, "total": 0.0}
+                            {"head_name": "string", "icar_share": 0.0, "state_share": 0.0, "total": 0.0}
                         ]
                     }
                 }
@@ -372,56 +383,66 @@ def main():
                 if extracted_budget:
                     st.success("Document analyzed successfully!")
                     
-                    # 1. Initialize a master dictionary forcing all 5 heads to 0.0
-                    budget_dict = {head: {'icar': 0.0, 'state': 0.0, 'total': 0.0} for head in BUDGET_HEADS}
+                    # Force creation of a dictionary with ALL 5 standard heads (defaulted to 0)
+                    budget_dict = {h: {'icar': 0.0, 'state': 0.0, 'total': 0.0} for h in BUDGET_HEADS}
                     
-                    # 2. STRICT 75:25 MATHEMATICAL ENFORCEMENT & HEAD MAPPING
+                    # --- STRICT 75:25 MATHEMATICAL ENFORCEMENT (WITH 100% TSP EXCEPTION) ---
                     for head in extracted_budget.get('heads', []):
-                        h_name = head.get('head_name', '').upper()
                         extracted_total = float(head.get('total') or 0.0)
                         extracted_icar = float(head.get('icar_share') or 0.0)
+                        raw_name = head.get('head_name', '').upper()
                         
-                        # Match the AI's head name to our strict 5 standard BUDGET_HEADS
+                        # Match the AI's extracted name to the standard BUDGET_HEADS
                         matched_head = None
-                        if "PAY" in h_name: matched_head = BUDGET_HEADS[0]
-                        elif "TRAVEL" in h_name or "TA" in h_name: matched_head = BUDGET_HEADS[1]
-                        elif "OTHER" in h_name or "ORC" in h_name: matched_head = BUDGET_HEADS[2]
-                        elif "NON" in h_name or "EQUIPMENT" in h_name: matched_head = BUDGET_HEADS[3]
-                        elif "TSP" in h_name: matched_head = BUDGET_HEADS[4]
+                        if "PAY" in raw_name: matched_head = BUDGET_HEADS[0]
+                        elif "TRAV" in raw_name or "TA" in raw_name: matched_head = BUDGET_HEADS[1]
+                        elif "NON" in raw_name or "EQUIP" in raw_name or "WORK" in raw_name: matched_head = BUDGET_HEADS[3]
+                        elif "RECURR" in raw_name or "ORC" in raw_name: matched_head = BUDGET_HEADS[2]
+                        elif "TSP" in raw_name: matched_head = BUDGET_HEADS[4]
                         
-                        if not matched_head:
-                            continue # Skip unknown categories
-                        
-                        # Exception: TSP is always 100% ICAR share
-                        if "TSP" in matched_head:
-                            final_total = extracted_total if extracted_total > 0 else extracted_icar
-                            budget_dict[matched_head]['total'] = round(final_total, 2)
-                            budget_dict[matched_head]['icar'] = round(final_total, 2)
-                            budget_dict[matched_head]['state'] = 0.0
-                        else:
-                            # Standard 75:25 Split
-                            if extracted_total == 0 and extracted_icar > 0:
-                                final_total = extracted_icar / 0.75
+                        if matched_head:
+                            # Exception: TSP is always 100% ICAR share
+                            if "TSP" in matched_head.upper():
+                                final_total = extracted_total if extracted_total > 0 else extracted_icar
+                                budget_dict[matched_head]['total'] = round(final_total, 2)
+                                budget_dict[matched_head]['icar'] = round(final_total, 2)
+                                budget_dict[matched_head]['state'] = 0.0
                             else:
-                                final_total = extracted_total
+                                # Standard 75:25 Split
+                                if extracted_total == 0 and extracted_icar > 0:
+                                    final_total = extracted_icar / 0.75
+                                else:
+                                    final_total = extracted_total
 
-                            budget_dict[matched_head]['total'] = round(final_total, 2)
-                            budget_dict[matched_head]['icar'] = round(final_total * 0.75, 2)
-                            budget_dict[matched_head]['state'] = round(final_total * 0.25, 2)
+                                budget_dict[matched_head]['total'] = round(final_total, 2)
+                                budget_dict[matched_head]['icar'] = round(final_total * 0.75, 2)
+                                budget_dict[matched_head]['state'] = round(final_total * 0.25, 2)
                     
+                    # --- CLEAN UI DISPLAY ---
+                    is_rev = "Yes" if doc_type == "Revised Allocation" else "No"
+                    doc_date = extracted_budget.get('date', 'Unknown')
                     
-                    # --- Save the PDF File Locally and push to GitHub ---
-                    safe_doc_type = doc_type.replace(" ", "_")
-                    pdf_path = f"documents/{safe_doc_type}_{selected_fy}.pdf"
-                    with open(pdf_path, "wb") as f:
-                        f.write(budget_file.getvalue())
-                    # Push PDF bytes to GitHub
-                    backup_to_github(pdf_path, budget_file.getvalue())
+                    st.info(f"📅 **Document Date:** {doc_date} | 🔄 **Type:** {doc_type}")
                     
-                    # Store PDF reference in data
-                    data['pdfs'][doc_type] = pdf_path
+                    # Create the dataframe for display including ALL heads
+                    df_data = []
+                    for h in BUDGET_HEADS:
+                        df_data.append({
+                            "Budget Head": h,
+                            "ICAR Share (Lakhs)": budget_dict[h]['icar'],
+                            "State Share (Lakhs)": budget_dict[h]['state'],
+                            "Total (Lakhs)": budget_dict[h]['total']
+                        })
                     
-                    # --- Route data to correct storage location based on Radio Button ---
+                    df_extracted = pd.DataFrame(df_data)
+                    # Add a TOTAL row visually
+                    df_extracted.loc['Total'] = df_extracted.sum(numeric_only=True)
+                    df_extracted.at['Total', 'Budget Head'] = "TOTAL"
+                    
+                    st.dataframe(df_extracted, use_container_width=True, hide_index=True)
+                    # ------------------------
+                    
+                    # Route data to correct storage location based on Radio Button
                     if doc_type == "Initial Allocation":
                         data['allocation'] = budget_dict
                     elif doc_type == "Revised Allocation":
@@ -430,14 +451,11 @@ def main():
                         q_key = doc_type.split(" ")[0] # Extracts "Q1", "Q2", etc.
                         data['quarterly_allocations'][q_key] = budget_dict
                     
-                    doc_date = extracted_budget.get('date', 'Unknown')
                     data['latest_quarter'] = doc_type
                     data['latest_date'] = doc_date
                     
                     save_data(data, selected_fy)
-                    
-                    st.info(f"📅 **Document Date:** {doc_date} | 🔄 **Type:** {doc_type}")
-                    st.toast("Budget Data & PDF Saved to GitHub!")
+                    st.toast("Budget Data Saved to GitHub!")
 
     # --- TAB 3: INSTALLMENTS ---
     with tabs[2]:
