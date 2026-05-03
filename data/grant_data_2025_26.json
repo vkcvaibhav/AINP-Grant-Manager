@@ -57,11 +57,37 @@
                 "total": 100000.0
             }
         },
-        "Q3": {},
+        "Q3": {
+            "Pay and Allowances": {
+                "icar": 0.0,
+                "state": 0.0,
+                "total": 0.0
+            },
+            "Travelling Allowances (TA)": {
+                "icar": 0.0,
+                "state": 0.0,
+                "total": 0.0
+            },
+            "Other Recurring Contingencies (ORC)": {
+                "icar": 318750.0,
+                "state": 106250.0,
+                "total": 425000.0
+            },
+            "Non-Recurring Contingencies (Equipments/Works)": {
+                "icar": 75000.0,
+                "state": 25000.0,
+                "total": 100000.0
+            },
+            "TSP": {
+                "icar": 100000.0,
+                "state": 0.0,
+                "total": 100000.0
+            }
+        },
         "Q4": {}
     },
     "installments": [],
     "expenditure": [],
-    "latest_quarter": "Q2 Release",
+    "latest_quarter": "Q3 Release",
     "latest_date": "2026-01-28"
 }
