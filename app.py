@@ -98,7 +98,7 @@ def save_data(data, fy):
     backup_to_github(filename, json_str)
 
 
-#--- B. Document Processing (OCR & AI) ---
+# --- B. Document Processing (OCR & AI) ---
 def process_upload_with_ai(uploaded_file, prompt_task):
     """Uses Gemini to natively read the PDF and extract JSON structured data."""
     try:
