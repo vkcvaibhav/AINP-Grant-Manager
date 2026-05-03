@@ -144,6 +144,23 @@
             },
             "type": "VII",
             "available": false
+        },
+        {
+            "date": "2026-02-12",
+            "quarter": "Q4",
+            "installment_num": "VII",
+            "purpose": "GIA-Salary",
+            "pfms_id": "C022609036389",
+            "amount": 0.0,
+            "heads": {
+                "Pay and Allowances": 0.0,
+                "Travelling Allowances (TA)": 0.0,
+                "Other Recurring Contingencies (ORC)": 0.0,
+                "Non-Recurring Contingencies (Equipments/Works)": 0.0,
+                "TSP": 0.0
+            },
+            "type": "VII",
+            "available": false
         }
     ],
     "expenditure": [],
