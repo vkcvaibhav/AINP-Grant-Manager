@@ -386,7 +386,7 @@ def main():
                         save_data(data, selected_fy)
                         st.toast("Budget Data Saved to GitHub & PDF saved locally!")
 
-        # --- BUDGET VISUALIZATION & EDITING ---
+        # --- BUDGET VISUALIZATION & EDITING (MOVED TO TAB 1) ---
         st.divider()
         st.subheader("📑 Uploaded Budget Documents (Editable)")
         
@@ -482,7 +482,7 @@ def main():
                         
         st.divider()
         
-        # --- Total Mismatch/Status Table ---
+        # --- Total Mismatch/Status Table (MOVED TO TAB 1) ---
         active_budget = data.get('revised_allocation') or data.get('allocation')
         if active_budget:
             st.subheader("⚖️ Allocation vs. Quarterly Release Mismatch")
@@ -725,20 +725,7 @@ def main():
 
             today_str = datetime.now().strftime("%d/%m/%Y")
 
-            default_letter = f"""કીટકશાસ્ત્ર વિભાગ
-ન. મ. કૃષિ મહાવિદ્યાલય
-નવસારી કૃષિ યુનિવર્સિટી
-નવસારી- ૩૯૬ ૪૫૦ (ગુજરાત)
-
-ડૉ. જે. જે. પસ્તાગિયા
-પ્રાધ્યાપક અને વડા (ઈ/ચા.)
-મોબાઇલ: +૯૧ ૯૮૭૯૦ ૩૮૫૩૯
-ઇમેલ: headentonau@gmail.com
-
-જા.નં. એસીએન/એન્ટો/       /૨૦૨૬, નવસારી
-તારીખ: {today_str}
-
-પ્રતિ,
+            default_letter_body = f"""પ્રતિ,
 હિસાબ નિયામકશ્રી
 નવસારી કૃષિ યુનિવર્સિટી
 નવસારી- ૩૯૬ ૪૫૦
@@ -747,30 +734,99 @@ def main():
 
 વિષય:- બ.સ. ૩૦૩/ ૨૦૯૨ અને ૩૦૩/ ૨૦૯૨/A માં ICAR – NCIPM તરફથી આવેલ ગ્રાન્ટ ફાળવવા બાબત...
 
-જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે ચાલતી આઈ.સી.એ.આર. યોજના AINP on Agricultural Acarology (75:25%) (BH.303/2092) માં આવેલ ગ્રાન્ટને કોષ્ટકમાં જણાવ્યાનુસાર ફાળવી આપવા આપ સાહેબશ્રીને નમ્ર વિનંતી.
-
-Name of Centre (Scheme): AINP on Agril Acarology (BH.303/2092)
-Pay And allowance: {pay_amt}/-
-Recurring Contingencies: {rec_amt}/-
-Non-Recurring Contingencies: {non_rec_amt}/-
-Total Amount: {total_amt}/-
-
-In Rupees: ______________________ only.
-
-સામેલ: ઉપર મુજબ
-પ્રોજેક્ટ ઈન્ચાર્જ                                                                                                                     પ્રાધ્યાપક અને વડા"""
+જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે ચાલતી આઈ.સી.એ.આર. યોજના AINP on Agricultural Acarology (75:25%) (BH.303/2092) માં આવેલ ગ્રાન્ટને કોષ્ટકમાં જણાવ્યાનુસાર ફાળવી આપવા આપ સાહેબશ્રીને નમ્ર વિનંતી."""
 
             st.write("✏️ **Preview and Edit Letter Text:**")
-            edited_letter = st.text_area("You can edit the text below manually before downloading.", value=default_letter, height=450)
+            edited_letter_body = st.text_area("Body Text:", value=default_letter_body, height=250)
+            
+            st.write("📊 **Budget Table Preview (Will be formatted nicely in Word):**")
+            df_table = pd.DataFrame({
+                "Name of Centre (Scheme)": ["AINP on Agril Acarology\n(BH.303/2092)"],
+                "Pay And allowance": [f"{int(pay_amt)}/-" if pay_amt else "-"],
+                "Recurring Contingencies": [f"{int(rec_amt)}/-" if rec_amt else "-"],
+                "Non-Recurring Contingencies": [f"{int(non_rec_amt)}/-" if non_rec_amt else "-"],
+                "Total Amount": [f"{int(total_amt)}/-"]
+            })
+            st.table(df_table)
+            
+            in_words = st.text_input("In Rupees (Words):", "One lakh rupee only")
             
             is_approved = st.checkbox("✅ I approve this letter format and content.")
             
             if is_approved:
-                # Generate DOCX
+                # --- GENERATE DOCX ---
                 doc = Document()
-                for para in edited_letter.split('\n'):
-                    doc.add_paragraph(para)
                 
+                # --- HEADER WITH LOGOS ---
+                header_table = doc.add_table(rows=1, cols=3)
+                header_table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for cell in header_table.columns[0].cells: cell.width = Inches(1.5)
+                for cell in header_table.columns[1].cells: cell.width = Inches(3.5)
+                for cell in header_table.columns[2].cells: cell.width = Inches(1.5)
+                
+                if NAU_LOGO and os.path.exists(NAU_LOGO):
+                    p = header_table.cell(0, 0).paragraphs[0]
+                    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    p.add_run().add_picture(NAU_LOGO, width=Inches(1.0))
+                
+                p_center = header_table.cell(0, 1).paragraphs[0]
+                p_center.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                run_center = p_center.add_run("કીટકશાસ્ત્ર વિભાગ\nન. મ. કૃષિ મહાવિદ્યાલય\nનવસારી કૃષિ યુનિવર્સિટી\nનવસારી- ૩૯૬ ૪૫૦ (ગુજરાત)\n\nડૉ. જે. જે. પસ્તાગિયા\nપ્રાધ્યાપક અને વડા (ઈ/ચા.)")
+                run_center.bold = True
+                
+                if ICAR_LOGO and os.path.exists(ICAR_LOGO):
+                    p = header_table.cell(0, 2).paragraphs[0]
+                    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                    p.add_run().add_picture(ICAR_LOGO, width=Inches(1.0))
+                
+                p_contact = doc.add_paragraph("મોબાઇલ: +૯૧ ૯૮૭૯૦ ૩૮૫૩૯ | ઇમેલ: headentonau@gmail.com")
+                p_contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                
+                # Divider line
+                doc.add_paragraph("_"*75).alignment = WD_ALIGN_PARAGRAPH.CENTER
+                
+                # --- REF NO & DATE ---
+                ref_table = doc.add_table(rows=1, cols=2)
+                ref_table.cell(0,0).text = "જા.નં. એસીએન/એન્ટો/       /૨૦૨૬, નવસારી"
+                ref_table.cell(0,1).text = f"તારીખ: {today_str}"
+                ref_table.cell(0,1).paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                
+                # --- BODY TEXT ---
+                for para in edited_letter_body.split('\n'):
+                    if para.strip():
+                        doc.add_paragraph(para)
+                    else:
+                        doc.add_paragraph()
+                
+                # --- BUDGET TABLE ---
+                doc.add_paragraph() # spacer
+                t = doc.add_table(rows=2, cols=5)
+                t.style = 'Table Grid'
+                
+                headers = ["Name of Centre (Scheme)", "Pay And allowance", "Recurring Contingencies", "Non-Recurring Contingencies", "Total Amount"]
+                for i, h in enumerate(headers):
+                    t.cell(0, i).text = h
+                    t.cell(0, i).paragraphs[0].runs[0].bold = True
+                    
+                row = t.rows[1]
+                row.cells[0].text = "AINP on Agril Acarology\n(BH.303/2092)"
+                row.cells[1].text = f"{int(pay_amt)}/-" if pay_amt else "-"
+                row.cells[2].text = f"{int(rec_amt)}/-" if rec_amt else "-"
+                row.cells[3].text = f"{int(non_rec_amt)}/-" if non_rec_amt else "-"
+                row.cells[4].text = f"{int(total_amt)}/-"
+                
+                # --- FOOTER ---
+                doc.add_paragraph()
+                doc.add_paragraph(f"In Rupees: {in_words}")
+                doc.add_paragraph()
+                doc.add_paragraph("સામેલ: ઉપર મુજબ")
+                
+                sign_table = doc.add_table(rows=1, cols=2)
+                sign_table.cell(0,0).text = "પ્રોજેક્ટ ઈન્ચાર્જ"
+                sign_table.cell(0,1).text = "પ્રાધ્યાપક અને વડા"
+                sign_table.cell(0,1).paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                
+                # --- SAVE AND DOWNLOAD ---
                 doc_io = io.BytesIO()
                 doc.save(doc_io)
                 doc_io.seek(0)
