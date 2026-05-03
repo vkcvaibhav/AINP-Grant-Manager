@@ -1,6 +1,22 @@
 {
     "financial_year": "2026-27",
-    "allocation": {},
+    "allocation": {
+        "Recurring Contingencies (General + Travelling Allowances)": {
+            "icar": 318750.0,
+            "state": 106250.0,
+            "total": 425000.0
+        },
+        "Non Recurring Contingencies": {
+            "icar": 75000.0,
+            "state": 25000.0,
+            "total": 100000.0
+        },
+        "TSP": {
+            "icar": 100000.0,
+            "state": 0.0,
+            "total": 100000.0
+        }
+    },
     "revised_allocation": {
         "Pay and Allowances": {
             "icar": 30.0,
