@@ -23,7 +23,7 @@ for d in DIRS:
 # AI Setup
 api_key = st.secrets.get("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
-model_pro = genai.GenerativeModel('gemini-3.1-pro-preview')   
+model_pro = genai.GenerativeModel('gemini-1.5-pro-latest')   
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
@@ -532,7 +532,7 @@ def main():
         if email_file and pfms_file and st.button("Analyze & Process Installment"):
             with st.spinner("Analyzing Email and PFMS documents..."):
                 
-                # Use Gemini Native PDF reading for BOTH files
+                # Package BOTH PDFs as native files for Gemini
                 pdf_data_email = {"mime_type": "application/pdf", "data": email_file.getvalue()}
                 pdf_data_pfms = {"mime_type": "application/pdf", "data": pfms_file.getvalue()}
                 
@@ -554,6 +554,7 @@ def main():
                 """
                 
                 try:
+                    # Pass the prompt and BOTH files directly to the model
                     response = model_pro.generate_content([full_prompt, pdf_data_email, pdf_data_pfms])
                     json_str = response.text.replace('```json', '').replace('```', '').strip()
                     extracted_inst = json.loads(json_str)
@@ -680,6 +681,27 @@ def main():
                                     with open(pfms_path, "rb") as f:
                                         st.download_button("📥 Download PFMS PDF", f, file_name=f"{inst['pfms_id']}_PFMS.pdf", key=f"dl_p_{inst['pfms_id']}")
                             st.divider()
+            
+            # --- NEW ADDITION: SUMMARY TABLE ---
+            st.divider()
+            st.subheader("📊 Summary of Received Installments (Q1 - Q4)")
+            
+            summary_data = {h: {"Q1 (₹)": 0.0, "Q2 (₹)": 0.0, "Q3 (₹)": 0.0, "Q4 (₹)": 0.0, "Total (₹)": 0.0} for h in BUDGET_HEADS}
+            
+            for inst in data['installments']:
+                q = inst.get('quarter')
+                if q in ["Q1", "Q2", "Q3", "Q4"]:
+                    q_key = f"{q} (₹)"
+                    for head, amt in inst.get('heads', {}).items():
+                        if head in summary_data:
+                            summary_data[head][q_key] += float(amt)
+                            summary_data[head]["Total (₹)"] += float(amt)
+                            
+            df_summary = pd.DataFrame.from_dict(summary_data, orient='index')
+            df_summary.loc['GRAND TOTAL'] = df_summary.sum(numeric_only=True)
+            st.dataframe(df_summary, use_container_width=True)
+            # --- END NEW ADDITION ---
+
         else:
             st.info("No installments recorded yet.")
 
