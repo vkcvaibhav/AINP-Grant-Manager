@@ -70,14 +70,14 @@
                 "total": 0.0
             },
             "Other Recurring Contingencies (ORC)": {
-                "icar": 318750.0,
-                "state": 106250.0,
-                "total": 425000.0
+                "icar": 125000.0,
+                "state": 41666.67,
+                "total": 166666.67
             },
             "Non-Recurring Contingencies (Equipments/Works)": {
-                "icar": 75000.0,
-                "state": 25000.0,
-                "total": 100000.0
+                "icar": 0.0,
+                "state": 0.0,
+                "total": 0.0
             },
             "TSP": {
                 "icar": 100000.0,
