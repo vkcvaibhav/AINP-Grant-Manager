@@ -1,20 +1,35 @@
 {
     "financial_year": "2026-27",
     "allocation": {
-        "Recurring Contingencies (General + Travelling Allowances)": {
-            "icar": 318750.0,
-            "state": 106250.0,
-            "total": 425000.0
+        "Pay and Allowances": {
+            "icar": 30.0,
+            "state": 10.0,
+            "total": 40.0
         },
-        "Non Recurring Contingencies": {
-            "icar": 75000.0,
-            "state": 25000.0,
-            "total": 100000.0
+        "Travelling Allowances": {
+            "icar": 0.2,
+            "state": 0.07,
+            "total": 0.27
+        },
+        "Other Recurring Contingencies": {
+            "icar": 4.05,
+            "state": 1.35,
+            "total": 5.4
+        },
+        "Non-Recurring Contingencies": {
+            "icar": 1.0,
+            "state": 0.33,
+            "total": 1.33
         },
         "TSP": {
-            "icar": 100000.0,
+            "icar": 1.0,
             "state": 0.0,
-            "total": 100000.0
+            "total": 1.0
+        },
+        "Total": {
+            "icar": 36.0,
+            "state": 12.0,
+            "total": 48.0
         }
     },
     "revised_allocation": {
@@ -36,6 +51,12 @@
     },
     "installments": [],
     "expenditure": [],
-    "latest_quarter": "Full Year",
-    "latest_date": "2026-01-28"
+    "latest_quarter": "Initial Allocation",
+    "latest_date": "2026-02-18",
+    "quarterly_allocations": {
+        "Q1": {},
+        "Q2": {},
+        "Q3": {},
+        "Q4": {}
+    }
 }
