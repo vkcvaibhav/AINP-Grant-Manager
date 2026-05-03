@@ -23,11 +23,11 @@ for d in DIRS:
 # AI Setup
 api_key = st.secrets.get("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
-model_pro = genai.GenerativeModel('gemini-3.1-pro-preview')   
+model_pro = genai.GenerativeModel('gemini-1.5-pro-latest')   
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
-ICAR_LOGO = 'logos/icar_logo.png' if os.path.exists('logos/icar_logo.png') else None
+ICAR_LOGO = 'logos/icar_logo.png' if os.path.exists('icar_logo.png') else None
 GUJARATI_FONT = 'fonts/NotoSansGujarati-Regular.ttf'
 
 # Define standard Heads
@@ -47,20 +47,16 @@ def backup_to_github(filepath, content_str):
     github_token = st.secrets.get("GITHUB_TOKEN")
     
     if not github_token:
-        # If no token is found, just skip the backup (useful for local testing)
         return
 
     try:
         g = Github(github_token)
         repo = g.get_repo("vkcvaibhav/AINP-Grant-Manager") # Your exact repo name
         
-        # Check if the file already exists in GitHub
         try:
             contents = repo.get_contents(filepath)
-            # If it exists, UPDATE it
             repo.update_file(contents.path, f"Auto-backup {filepath}", content_str, contents.sha)
         except Exception:
-            # If it does not exist yet, CREATE it
             repo.create_file(filepath, f"Auto-create {filepath}", content_str)
             
     except Exception as e:
@@ -77,6 +73,7 @@ def load_data(fy):
     else:
         return {
             "financial_year": fy,
+            "budget_metadata": {"date": None, "context": None, "is_revision": False},
             "allocation": {}, 
             "revised_allocation": {},
             "installments": [], 
@@ -86,11 +83,9 @@ def load_data(fy):
 def save_data(data, fy):
     filename = get_fy_filename(fy)
     
-    # 1. Save locally for immediate app use
     with open(filename, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
         
-    # 2. Push to GitHub for permanent backup
     json_str = json.dumps(data, indent=4, ensure_ascii=False)
     backup_to_github(filename, json_str)
 
@@ -99,7 +94,6 @@ def save_data(data, fy):
 def process_upload_with_ai(uploaded_file, prompt_task):
     """Uses Gemini to natively read the PDF and extract JSON structured data."""
     try:
-        # Package the raw PDF file directly for Gemini
         pdf_data = {
             "mime_type": "application/pdf",
             "data": uploaded_file.getvalue()
@@ -116,10 +110,8 @@ def process_upload_with_ai(uploaded_file, prompt_task):
         For currency, return numbers only (e.g., 100000). Convert dates to YYYY-MM-DD format.
         """
         
-        # Send the text prompt and the raw PDF directly to Gemini
         response = model_pro.generate_content([full_prompt, pdf_data])
         
-        # Parse JSON from response (MUST BE ON ONE LINE)
         json_str = response.text.replace('```json', '').replace('```', '').strip()
         extracted_data = json.loads(json_str)
         return extracted_data
@@ -253,19 +245,25 @@ def main():
     with tabs[0]:
         st.header(f"Financial Year {selected_fy}")
         
+        # Display Document Metadata Prominently
+        meta = data.get('budget_metadata', {})
+        if meta and meta.get('date'):
+            st.info(f"**Latest Budget Document Date:** {meta.get('date')} | **Context:** {meta.get('context')}")
+
         col1, col2, col3 = st.columns(3)
         with col1:
-            total_allocated = sum(v.get('total', 0) for k,v in data['revised_allocation'].items()) if data['revised_allocation'] else 0
+            total_allocated = sum(v.get('total', 0) for k,v in data['revised_allocation'].items()) if data['revised_allocation'] else sum(v.get('total', 0) for k,v in data['allocation'].items())
             st.metric("Total Sanctioned Budget", f"₹{total_allocated:,}")
         with col2:
             total_received = sum(inst['amount'] for inst in data['installments'])
             st.metric("Total Funds Received (PFMS)", f"₹{total_received:,}")
         with col3:
-            st.metric("Pending Received", "Calculated later")
+            st.metric("Pending Received", f"₹{total_allocated - total_received:,}")
             
         st.subheader("Budget Head Overview")
-        if data['revised_allocation']:
-            df_budget = pd.DataFrame.from_dict(data['revised_allocation'], orient='index')
+        display_dict = data['revised_allocation'] if data['revised_allocation'] else data['allocation']
+        if display_dict:
+            df_budget = pd.DataFrame.from_dict(display_dict, orient='index')
             st.dataframe(df_budget, use_container_width=True)
         else:
             st.info("Upload budget allocation to begin.")
@@ -273,7 +271,10 @@ def main():
     # --- TAB 2: BUDGET INTAKE ---
     with tabs[1]:
         st.header("Upload Budget Allocation / Revision PDF")
-        st.write("Emails like: *'Revised Budget Allocation 2025-26 - NAU Centre, Navsari'*")
+        
+        # User Guidance Box
+        st.write("Provide optional guidance to help the AI extract data (e.g., *'This is the 3rd quarter release'* or *'This is a revised budget'*).")
+        user_guidance = st.text_area("Guidance for AI (Optional):", placeholder="Enter specific instructions here...")
         
         budget_file = st.file_uploader("Upload Budget Document", type=['pdf'], key="budget_up")
         
@@ -281,12 +282,13 @@ def main():
             with st.spinner("AI is analyzing budget PDF..."):
                 
                 budget_prompt = {
-                    "context": f"Budget Allocation for AICRP/AINP Acarology scheme for Financial Year {selected_fy}.",
+                    "context": f"Budget Allocation for AICRP/AINP Acarology scheme for Financial Year {selected_fy}. USER GUIDANCE: {user_guidance}",
                     "structure": {
+                        "document_date": "YYYY-MM-DD",
                         "is_revision": "boolean (true if this revises a previous allocation)",
-                        "date": "YYYY-MM-DD",
+                        "document_context": "string (Identify quarterly details e.g., 'Includes release up to 3rd quarter and pending 4th quarter', or 'Full year revised allocation')",
                         "heads": [
-                            {"head_name": "string (e.g., Pay & Allowances, Recurring)", "icar_share": 0.0, "state_share": 0.0, "total": 0.0}
+                            {"head_name": "string (e.g., Pay & Allowances, Recurring)", "icar_share": 0.0, "total": 0.0}
                         ]
                     }
                 }
@@ -297,11 +299,18 @@ def main():
                     st.success("Document analyzed successfully!")
                     
                     # --- STRICT 75:25 MATHEMATICAL ENFORCEMENT (WITH 100% TSP EXCEPTION) ---
-                    # We override the AI's extraction here to ensure perfect math
                     for head in extracted_budget.get('heads', []):
                         total_val = float(head.get('total') or 0.0)
+                        icar_val = float(head.get('icar_share') or 0.0)
                         head_name = head.get('head_name', '').upper()
                         
+                        # SMART RECOVERY: If document only shows ICAR share, calculate the 100% total
+                        if total_val == 0.0 and icar_val > 0.0:
+                            if "TSP" in head_name:
+                                total_val = icar_val
+                            else:
+                                total_val = icar_val / 0.75
+
                         head['total'] = total_val
                         
                         # Exception: TSP is always 100% ICAR share
@@ -315,15 +324,24 @@ def main():
                     
                     # --- CLEAN UI DISPLAY ---
                     is_rev = "Yes" if extracted_budget.get('is_revision') else "No"
-                    st.info(f"📅 **Document Date:** {extracted_budget.get('date')} | 🔄 **Is Revised Budget:** {is_rev}")
+                    st.info(f"📅 **Document Date:** {extracted_budget.get('document_date')} | 🔄 **Is Revised Budget:** {is_rev}")
+                    st.write(f"📝 **Quarterly Context / Details:** {extracted_budget.get('document_context')}")
                     
                     if extracted_budget.get('heads'):
                         df_extracted = pd.DataFrame(extracted_budget['heads'])
+                        df_extracted = df_extracted[["head_name", "icar_share", "state_share", "total"]]
                         df_extracted.columns = ["Budget Head", "ICAR Share (Lakhs)", "State Share (Lakhs)", "Total (Lakhs)"]
                         st.dataframe(df_extracted, use_container_width=True, hide_index=True)
                     else:
                         st.warning("No budget heads could be found in the document.")
                     # ------------------------
+                    
+                    # Save Metadata
+                    data['budget_metadata'] = {
+                        'date': extracted_budget.get('document_date'),
+                        'context': extracted_budget.get('document_context'),
+                        'is_revision': extracted_budget.get('is_revision')
+                    }
                     
                     budget_dict = {}
                     for head in extracted_budget.get('heads', []):
