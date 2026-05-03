@@ -274,6 +274,118 @@ def main():
         with col3:
             st.metric("Pending Received", f"₹{total_allocated - total_received:,}")
 
+    # --- TAB 2: BUDGET INTAKE ---
+    with tabs[1]:
+        st.header("Upload Budget Allocation / Revision PDF")
+        
+        st.markdown("""
+        **Instructions for Uploading:**
+        Please describe the document in the text box below (e.g., 'Initial Allocation', 'Revised Allocation', 'Q1 Release', 'Q3 Release') and upload the corresponding PDF.
+        """)
+        
+        doc_type_input = st.text_input("Describe the document you are uploading:")
+        budget_file = st.file_uploader("Upload Budget Document", type=['pdf'], key="budget_up")
+        
+        if budget_file and st.button("Analyze & Process Budget"):
+            if not doc_type_input.strip():
+                st.warning("⚠️ Please provide a description in the text box above before processing.")
+            else:
+                with st.spinner(f"AI is analyzing the PDF..."):
+                    
+                    budget_prompt = {
+                        "context": f"Document Description: {doc_type_input}. Scheme: AICRP/AINP Acarology. Financial Year: {selected_fy}. Extract the budget allocation table. IMPORTANT: Map the head names exactly to: 'Pay and Allowances', 'Travelling Allowances (TA)', 'Other Recurring Contingencies (ORC)', 'Non-Recurring Contingencies (Equipments/Works)', 'TSP'. Convert all Lakh values to absolute Rupees (e.g., 1.33 Lakhs becomes 133000, 40 Lakhs becomes 4000000).",
+                        "structure": {
+                            "is_revision": "boolean (true if this revises a previous allocation)",
+                            "date": "YYYY-MM-DD",
+                            "heads": [
+                                {"head_name": "string", "icar_share": 0.0, "state_share": 0.0, "total": 0.0}
+                            ]
+                        }
+                    }
+                    
+                    extracted_budget = process_upload_with_ai(budget_file, budget_prompt)
+                    
+                    if extracted_budget:
+                        st.success("Document analyzed successfully!")
+                        
+                        # Force creation of a dictionary with ALL 5 standard heads (defaulted to 0)
+                        budget_dict = {h: {'icar': 0.0, 'state': 0.0, 'total': 0.0} for h in BUDGET_HEADS}
+                        
+                        # --- STRICT 75:25 MATHEMATICAL ENFORCEMENT (WITH 100% TSP EXCEPTION) ---
+                        for head in extracted_budget.get('heads', []):
+                            extracted_total = float(head.get('total') or 0.0)
+                            extracted_icar = float(head.get('icar_share') or 0.0)
+                            raw_name = head.get('head_name', '').upper()
+                            
+                            # Match the AI's extracted name to the standard BUDGET_HEADS
+                            matched_head = None
+                            if "PAY" in raw_name: matched_head = BUDGET_HEADS[0]
+                            elif "TRAV" in raw_name or "TA" in raw_name: matched_head = BUDGET_HEADS[1]
+                            elif "NON" in raw_name or "EQUIP" in raw_name or "WORK" in raw_name: matched_head = BUDGET_HEADS[3]
+                            elif "RECURR" in raw_name or "ORC" in raw_name: matched_head = BUDGET_HEADS[2]
+                            elif "TSP" in raw_name: matched_head = BUDGET_HEADS[4]
+                            
+                            if matched_head:
+                                # Exception: TSP is always 100% ICAR share
+                                if "TSP" in matched_head.upper():
+                                    final_total = extracted_total if extracted_total > 0 else extracted_icar
+                                    budget_dict[matched_head]['total'] = round(final_total, 2)
+                                    budget_dict[matched_head]['icar'] = round(final_total, 2)
+                                    budget_dict[matched_head]['state'] = 0.0
+                                else:
+                                    # Standard 75:25 Split
+                                    if extracted_total == 0 and extracted_icar > 0:
+                                        final_total = extracted_icar / 0.75
+                                    else:
+                                        final_total = extracted_total
+
+                                    budget_dict[matched_head]['total'] = round(final_total, 2)
+                                    budget_dict[matched_head]['icar'] = round(final_total * 0.75, 2)
+                                    budget_dict[matched_head]['state'] = round(final_total * 0.25, 2)
+                        
+                        doc_date = extracted_budget.get('date', 'Unknown')
+                        desc_lower = doc_type_input.lower()
+                        assigned_type = "Unknown"
+                        dict_key = ""
+                        
+                        if "revis" in desc_lower:
+                            data['revised_allocation'] = budget_dict
+                            assigned_type = "Revised Allocation"
+                            dict_key = "revised_allocation"
+                        elif "q1" in desc_lower or "1st" in desc_lower:
+                            data['quarterly_allocations']["Q1"] = budget_dict
+                            assigned_type = "Q1 Release"
+                            dict_key = "Q1"
+                        elif "q2" in desc_lower or "2nd" in desc_lower:
+                            data['quarterly_allocations']["Q2"] = budget_dict
+                            assigned_type = "Q2 Release"
+                            dict_key = "Q2"
+                        elif "q3" in desc_lower or "3rd" in desc_lower:
+                            data['quarterly_allocations']["Q3"] = budget_dict
+                            assigned_type = "Q3 Release"
+                            dict_key = "Q3"
+                        elif "q4" in desc_lower or "4th" in desc_lower:
+                            data['quarterly_allocations']["Q4"] = budget_dict
+                            assigned_type = "Q4 Release"
+                            dict_key = "Q4"
+                        else:
+                            data['allocation'] = budget_dict
+                            assigned_type = "Initial Allocation"
+                            dict_key = "allocation"
+                            
+                        # Save the PDF locally for later download
+                        pdf_path = f"documents/{selected_fy}_{dict_key}.pdf"
+                        with open(pdf_path, "wb") as f:
+                            f.write(budget_file.getvalue())
+                            
+                        st.info(f"📅 **Document Date:** {doc_date} | 🔄 **Detected Type:** {assigned_type}")
+                        
+                        data['latest_quarter'] = assigned_type
+                        data['latest_date'] = doc_date
+                        
+                        save_data(data, selected_fy)
+                        st.toast("Budget Data Saved to GitHub & PDF saved locally!")
+
         # --- BUDGET VISUALIZATION & EDITING ---
         st.divider()
         st.subheader("📑 Uploaded Budget Documents (Editable)")
@@ -405,118 +517,6 @@ def main():
                 st.info("No allocated budget values to show yet.")
         else:
             st.info("Upload budget allocation to view Mismatch Table.")
-
-    # --- TAB 2: BUDGET INTAKE ---
-    with tabs[1]:
-        st.header("Upload Budget Allocation / Revision PDF")
-        
-        st.markdown("""
-        **Instructions for Uploading:**
-        Please describe the document in the text box below (e.g., 'Initial Allocation', 'Revised Allocation', 'Q1 Release', 'Q3 Release') and upload the corresponding PDF.
-        """)
-        
-        doc_type_input = st.text_input("Describe the document you are uploading:")
-        budget_file = st.file_uploader("Upload Budget Document", type=['pdf'], key="budget_up")
-        
-        if budget_file and st.button("Analyze & Process Budget"):
-            if not doc_type_input.strip():
-                st.warning("⚠️ Please provide a description in the text box above before processing.")
-            else:
-                with st.spinner(f"AI is analyzing the PDF..."):
-                    
-                    budget_prompt = {
-                        "context": f"Document Description: {doc_type_input}. Scheme: AICRP/AINP Acarology. Financial Year: {selected_fy}. Extract the budget allocation table. IMPORTANT: Map the head names exactly to: 'Pay and Allowances', 'Travelling Allowances (TA)', 'Other Recurring Contingencies (ORC)', 'Non-Recurring Contingencies (Equipments/Works)', 'TSP'. Convert all Lakh values to absolute Rupees (e.g., 1.33 Lakhs becomes 133000, 40 Lakhs becomes 4000000).",
-                        "structure": {
-                            "is_revision": "boolean (true if this revises a previous allocation)",
-                            "date": "YYYY-MM-DD",
-                            "heads": [
-                                {"head_name": "string", "icar_share": 0.0, "state_share": 0.0, "total": 0.0}
-                            ]
-                        }
-                    }
-                    
-                    extracted_budget = process_upload_with_ai(budget_file, budget_prompt)
-                    
-                    if extracted_budget:
-                        st.success("Document analyzed successfully!")
-                        
-                        # Force creation of a dictionary with ALL 5 standard heads (defaulted to 0)
-                        budget_dict = {h: {'icar': 0.0, 'state': 0.0, 'total': 0.0} for h in BUDGET_HEADS}
-                        
-                        # --- STRICT 75:25 MATHEMATICAL ENFORCEMENT (WITH 100% TSP EXCEPTION) ---
-                        for head in extracted_budget.get('heads', []):
-                            extracted_total = float(head.get('total') or 0.0)
-                            extracted_icar = float(head.get('icar_share') or 0.0)
-                            raw_name = head.get('head_name', '').upper()
-                            
-                            # Match the AI's extracted name to the standard BUDGET_HEADS
-                            matched_head = None
-                            if "PAY" in raw_name: matched_head = BUDGET_HEADS[0]
-                            elif "TRAV" in raw_name or "TA" in raw_name: matched_head = BUDGET_HEADS[1]
-                            elif "NON" in raw_name or "EQUIP" in raw_name or "WORK" in raw_name: matched_head = BUDGET_HEADS[3]
-                            elif "RECURR" in raw_name or "ORC" in raw_name: matched_head = BUDGET_HEADS[2]
-                            elif "TSP" in raw_name: matched_head = BUDGET_HEADS[4]
-                            
-                            if matched_head:
-                                # Exception: TSP is always 100% ICAR share
-                                if "TSP" in matched_head.upper():
-                                    final_total = extracted_total if extracted_total > 0 else extracted_icar
-                                    budget_dict[matched_head]['total'] = round(final_total, 2)
-                                    budget_dict[matched_head]['icar'] = round(final_total, 2)
-                                    budget_dict[matched_head]['state'] = 0.0
-                                else:
-                                    # Standard 75:25 Split
-                                    if extracted_total == 0 and extracted_icar > 0:
-                                        final_total = extracted_icar / 0.75
-                                    else:
-                                        final_total = extracted_total
-
-                                    budget_dict[matched_head]['total'] = round(final_total, 2)
-                                    budget_dict[matched_head]['icar'] = round(final_total * 0.75, 2)
-                                    budget_dict[matched_head]['state'] = round(final_total * 0.25, 2)
-                        
-                        doc_date = extracted_budget.get('date', 'Unknown')
-                        desc_lower = doc_type_input.lower()
-                        assigned_type = "Unknown"
-                        dict_key = ""
-                        
-                        if "revis" in desc_lower:
-                            data['revised_allocation'] = budget_dict
-                            assigned_type = "Revised Allocation"
-                            dict_key = "revised_allocation"
-                        elif "q1" in desc_lower or "1st" in desc_lower:
-                            data['quarterly_allocations']["Q1"] = budget_dict
-                            assigned_type = "Q1 Release"
-                            dict_key = "Q1"
-                        elif "q2" in desc_lower or "2nd" in desc_lower:
-                            data['quarterly_allocations']["Q2"] = budget_dict
-                            assigned_type = "Q2 Release"
-                            dict_key = "Q2"
-                        elif "q3" in desc_lower or "3rd" in desc_lower:
-                            data['quarterly_allocations']["Q3"] = budget_dict
-                            assigned_type = "Q3 Release"
-                            dict_key = "Q3"
-                        elif "q4" in desc_lower or "4th" in desc_lower:
-                            data['quarterly_allocations']["Q4"] = budget_dict
-                            assigned_type = "Q4 Release"
-                            dict_key = "Q4"
-                        else:
-                            data['allocation'] = budget_dict
-                            assigned_type = "Initial Allocation"
-                            dict_key = "allocation"
-                            
-                        # Save the PDF locally for later download
-                        pdf_path = f"documents/{selected_fy}_{dict_key}.pdf"
-                        with open(pdf_path, "wb") as f:
-                            f.write(budget_file.getvalue())
-                            
-                        st.info(f"📅 **Document Date:** {doc_date} | 🔄 **Detected Type:** {assigned_type}")
-                        
-                        data['latest_quarter'] = assigned_type
-                        data['latest_date'] = doc_date
-                        
-                        save_data(data, selected_fy)
-                        st.toast("Budget Data Saved to GitHub & PDF saved locally!")
 
     # --- TAB 3: INSTALLMENTS ---
     with tabs[2]:
