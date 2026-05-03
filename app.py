@@ -27,7 +27,8 @@ model_pro = genai.GenerativeModel('gemini-1.5-pro-latest')
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
-ICAR_LOGO = 'logos/icar_logo.png' if os.path.exists('icar_logo.png') else None
+# FIXED THE TYPO HERE TO PREVENT THE CRASH
+ICAR_LOGO = 'logos/icar_logo.png' if os.path.exists('logos/icar_logo.png') else None
 GUJARATI_FONT = 'fonts/NotoSansGujarati-Regular.ttf'
 
 # Define standard Heads
@@ -553,7 +554,7 @@ def main():
                 {{
                     "date": "YYYY-MM-DD",
                     "installment_number": "String (e.g., I, II, III, IV, V, etc.)",
-                    "purpose": "String (e.g., GIA-Salary, GIA-General, GIA-TSP)",
+                    "purpose": "String (e.g., GIA-Salary, GIA-General, GIA-TSP, GIA-General & Capital)",
                     "pfms_transaction_id": "String (e.g., C022...)",
                     "heads": [
                         {{"head_name": "string", "amount": 0.0}}
@@ -645,8 +646,11 @@ def main():
                     
         # Display existing installments
         st.divider()
-        st.subheader("📁 Saved Installments")
+        st.subheader("📁 Saved Installments (Editable)")
         if data['installments']:
+            # Sort by Date
+            data['installments'] = sorted(data['installments'], key=lambda x: x.get('date', '2000-01-01'))
+            
             for q in ["Q1", "Q2", "Q3", "Q4"]:
                 q_insts = [i for i in data['installments'] if i.get('quarter') == q]
                 if q_insts:
@@ -656,12 +660,26 @@ def main():
                             
                             col_a, col_b = st.columns([3, 1])
                             with col_a:
-                                if 'heads' in inst:
-                                    df_disp = pd.DataFrame(list(inst['heads'].items()), columns=["Budget Head", "Amount (₹)"])
-                                    df_disp.loc['TOTAL'] = ['TOTAL', inst['amount']]
-                                    st.dataframe(df_disp, use_container_width=True, hide_index=True)
-                                else:
-                                    st.write(f"Total Amount: ₹{inst['amount']}")
+                                # Provide an editable table for the saved installment
+                                inst_heads = inst.get('heads', {h: 0.0 for h in BUDGET_HEADS})
+                                df_data = [{"Budget Head": k, "Amount (₹)": v} for k, v in inst_heads.items()]
+                                df_saved = pd.DataFrame(df_data)
+                                
+                                edited_saved_df = st.data_editor(df_saved, use_container_width=True, hide_index=True, key=f"edit_saved_{inst['pfms_id']}")
+                                tot_amt_saved = edited_saved_df["Amount (₹)"].astype(float).sum()
+                                st.markdown(f"**Total Amount:** ₹{tot_amt_saved:,.2f}")
+                                
+                                if st.button("💾 Save Changes", key=f"save_btn_{inst['pfms_id']}"):
+                                    final_heads_saved = {row["Budget Head"]: float(row["Amount (₹)"]) for _, row in edited_saved_df.iterrows()}
+                                    for main_inst in data['installments']:
+                                        if main_inst['pfms_id'] == inst['pfms_id']:
+                                            main_inst['heads'] = final_heads_saved
+                                            main_inst['amount'] = tot_amt_saved
+                                            break
+                                    save_data(data, selected_fy)
+                                    st.toast("Installment Updated!")
+                                    st.rerun()
+                                    
                             with col_b:
                                 email_path = f"documents/{selected_fy}_Inst_{inst['pfms_id']}_Email.pdf"
                                 pfms_path = f"documents/{selected_fy}_Inst_{inst['pfms_id']}_PFMS.pdf"
@@ -769,7 +787,7 @@ def main():
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
 
-    # --- TAB 6: AI CHATBOT ---
+    # --- TAB 6: AI Chatbot ---
     with tabs[5]:
         st.header("Grant Smart-Assistant")
         st.write("Ask questions like: *'How much is remaining in ORC Recurring?'* or *'Generate a summary of spend for Quarter 3'*.")
