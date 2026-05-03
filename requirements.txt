@@ -6,3 +6,4 @@ pytesseract
 pandas
 python-docx
 fpdf2
+PyGithub
