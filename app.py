@@ -123,8 +123,7 @@ def process_upload_with_ai(uploaded_file, prompt_task):
         
         response = model_pro.generate_content([full_prompt, pdf_data])
         
-        json_str = response.text.replace('
-```json', '').replace('```', '').strip()
+        json_str = response.text.replace('```json', '').replace('```', '').strip()
         extracted_data = json.loads(json_str)
         return extracted_data
 
