@@ -27,7 +27,7 @@ model_pro = genai.GenerativeModel('gemini-3.1-pro-preview')
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
-ICAR_LOGO = 'logos/icar_logo.png' if os.path.exists('logos/icar_logo.png') else None
+ICAR_LOGO = 'logos/icar_logo.png' if os.path.exists('icar_logo.png') else None
 GUJARATI_FONT = 'fonts/NotoSansGujarati-Regular.ttf'
 
 # Define standard Heads
@@ -74,9 +74,11 @@ def load_data(fy):
     if os.path.exists(filename):
         with open(filename, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            # Ensure new quarterly structure exists in old data files
+            # Ensure new quarterly structure & pdfs exist in old data files
             if 'quarterly_allocations' not in data:
                 data['quarterly_allocations'] = {"Q1": {}, "Q2": {}, "Q3": {}, "Q4": {}}
+            if 'pdfs' not in data:
+                data['pdfs'] = {}
             return data
     else:
         return {
@@ -86,6 +88,7 @@ def load_data(fy):
             "quarterly_allocations": {"Q1": {}, "Q2": {}, "Q3": {}, "Q4": {}},
             "installments": [], 
             "expenditure": [],
+            "pdfs": {},
             "latest_quarter": "Full Year", 
             "latest_date": "N/A"
         }
@@ -343,9 +346,6 @@ def main():
                                     budget_dict[matched_head]['icar'] = round(final_total * 0.75, 2)
                                     budget_dict[matched_head]['state'] = round(final_total * 0.25, 2)
                         
-                        # --- CLEAN UI DISPLAY ---
-                        doc_date = extracted_budget.get('date', 'Unknown')
-                        
                         # Determine document type based on user input
                         desc_lower = doc_type_input.lower()
                         assigned_type = "Unknown"
@@ -368,44 +368,106 @@ def main():
                         else:
                             data['allocation'] = budget_dict
                             assigned_type = "Initial Allocation"
-                            
-                        st.info(f"📅 **Document Date:** {doc_date} | 🔄 **Detected Type:** {assigned_type}")
+
+                        # Save the physical PDF file
+                        if 'pdfs' not in data:
+                            data['pdfs'] = {}
                         
+                        pdf_filename = f"documents/Budget_{selected_fy}_{assigned_type.replace(' ', '_')}.pdf"
+                        with open(pdf_filename, "wb") as f:
+                            f.write(budget_file.getvalue())
+                        data['pdfs'][assigned_type] = pdf_filename
+                            
+                        # Update Metadata
+                        doc_date = extracted_budget.get('date', 'Unknown')
                         data['latest_quarter'] = assigned_type
                         data['latest_date'] = doc_date
                         
                         save_data(data, selected_fy)
-                        st.toast("Budget Data Saved to GitHub!")
+                        st.toast("Budget Data and PDF Saved!")
+                        st.rerun() # Refresh to show the new tables
 
-        # --- BUDGET VISUALIZATION (MOVED FROM DASHBOARD) ---
+        # --- BUDGET VISUALIZATION & EDITING ---
         st.divider()
-        st.subheader("📑 Uploaded Budget Documents")
+        st.subheader("📑 Uploaded Budget Documents & Manual Edit")
         
-        # Helper to neatly display dataframes with TOTAL rows in Rupees
-        def display_budget_df(b_dict):
-            df = pd.DataFrame.from_dict(b_dict, orient='index')
-            df.columns = ["ICAR Share (₹)", "State Share (₹)", "Total (₹)"]
-            df.loc['TOTAL'] = df.sum(numeric_only=True)
-            st.dataframe(df, use_container_width=True)
+        # Helper to neatly display editable dataframes and download PDFs
+        def display_editable_budget(b_dict, doc_key):
+            # Build DataFrame (excluding Total row for editing)
+            df_data = []
+            for h in BUDGET_HEADS:
+                if h not in b_dict:
+                    b_dict[h] = {'icar': 0.0, 'state': 0.0, 'total': 0.0}
+                df_data.append({
+                    "Budget Head": h,
+                    "ICAR Share (₹)": float(b_dict[h]['icar']),
+                    "State Share (₹)": float(b_dict[h]['state']),
+                    "Total (₹)": float(b_dict[h]['total'])
+                })
+            
+            df = pd.DataFrame(df_data)
+            
+            # Editable Dataframe
+            edited_df = st.data_editor(df, hide_index=True, use_container_width=True, key=f"edit_{doc_key}")
+            
+            # Recalculate & Download Buttons
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button(f"💾 Save Edits & Recalculate ({doc_key})", key=f"btn_{doc_key}"):
+                    for index, row in edited_df.iterrows():
+                        head = row["Budget Head"]
+                        extracted_total = float(row["Total (₹)"])
+                        extracted_icar = float(row["ICAR Share (₹)"])
+                        
+                        if "TSP" in head.upper():
+                            final_total = extracted_total if extracted_total > 0 else extracted_icar
+                            b_dict[head]['total'] = round(final_total, 2)
+                            b_dict[head]['icar'] = round(final_total, 2)
+                            b_dict[head]['state'] = 0.0
+                        else:
+                            if extracted_total == 0 and extracted_icar > 0:
+                                final_total = extracted_icar / 0.75
+                            else:
+                                final_total = extracted_total
+
+                            b_dict[head]['total'] = round(final_total, 2)
+                            b_dict[head]['icar'] = round(final_total * 0.75, 2)
+                            b_dict[head]['state'] = round(final_total * 0.25, 2)
+                            
+                    save_data(data, selected_fy)
+                    st.rerun()
+                    
+            with c2:
+                pdf_path = data.get('pdfs', {}).get(doc_key)
+                if pdf_path and os.path.exists(pdf_path):
+                    with open(pdf_path, "rb") as f:
+                        st.download_button("📥 Download Original PDF", data=f, file_name=os.path.basename(pdf_path), mime="application/pdf", key=f"dl_{doc_key}")
+                        
+            # Show Totals below table
+            t_icar = sum(b_dict[h]['icar'] for h in BUDGET_HEADS)
+            t_state = sum(b_dict[h]['state'] for h in BUDGET_HEADS)
+            t_total = sum(b_dict[h]['total'] for h in BUDGET_HEADS)
+            st.info(f"**TOTALS** ➡️ ICAR Share: ₹ {t_icar:,.2f} | State Share: ₹ {t_state:,.2f} | Total: ₹ {t_total:,.2f}")
 
         col_a, col_b = st.columns(2)
         with col_a:
             if data.get('allocation'):
-                with st.expander("📄 Initial Full-Year Budget Allocation"):
-                    display_budget_df(data['allocation'])
+                with st.expander("📄 Initial Full-Year Budget Allocation", expanded=True):
+                    display_editable_budget(data['allocation'], "Initial Allocation")
         with col_b:
             if data.get('revised_allocation'):
-                with st.expander("📄 Revised Full-Year Budget Allocation"):
-                    display_budget_df(data['revised_allocation'])
+                with st.expander("📄 Revised Full-Year Budget Allocation", expanded=True):
+                    display_editable_budget(data['revised_allocation'], "Revised Allocation")
                     
-        st.write("📅 **Quarterly Releases (Click to view data)**")
+        st.write("📅 **Quarterly Releases (Click to view and edit data)**")
         q_cols = st.columns(4)
         for i, q in enumerate(["Q1", "Q2", "Q3", "Q4"]):
+            q_key = f"{q} Release"
             q_data = data['quarterly_allocations'].get(q)
             if q_data:
                 with q_cols[i]:
                     with st.expander(f"📄 {q} Release Data"):
-                        display_budget_df(q_data)
+                        display_editable_budget(q_data, q_key)
                         
         st.divider()
         
