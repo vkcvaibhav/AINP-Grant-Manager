@@ -1,0 +1,41 @@
+{
+    "financial_year": "2025-26",
+    "allocation": {
+        "Pay and Allowances": {
+            "icar": 3000000.0,
+            "state": 1000000.0,
+            "total": 4000000.0
+        },
+        "Travelling Allowances (TA)": {
+            "icar": 20250.0,
+            "state": 6750.0,
+            "total": 27000.0
+        },
+        "Other Recurring Contingencies (ORC)": {
+            "icar": 405000.0,
+            "state": 135000.0,
+            "total": 540000.0
+        },
+        "Non-Recurring Contingencies (Equipments/Works)": {
+            "icar": 99750.0,
+            "state": 33250.0,
+            "total": 133000.0
+        },
+        "TSP": {
+            "icar": 100000.0,
+            "state": 0.0,
+            "total": 100000.0
+        }
+    },
+    "revised_allocation": {},
+    "quarterly_allocations": {
+        "Q1": {},
+        "Q2": {},
+        "Q3": {},
+        "Q4": {}
+    },
+    "installments": [],
+    "expenditure": [],
+    "latest_quarter": "Initial Allocation",
+    "latest_date": "2026-02-18"
+}
