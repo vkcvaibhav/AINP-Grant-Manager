@@ -178,6 +178,23 @@
             },
             "type": "VI",
             "available": false
+        },
+        {
+            "date": "2025-12-19",
+            "quarter": "Q3",
+            "installment_num": "VI",
+            "purpose": "GIA-General & Capital",
+            "pfms_id": "C122533483153",
+            "amount": 100000.0,
+            "heads": {
+                "Pay and Allowances": 0.0,
+                "Travelling Allowances (TA)": 0.0,
+                "Other Recurring Contingencies (ORC)": 100000.0,
+                "Non-Recurring Contingencies (Equipments/Works)": 0.0,
+                "TSP": 0.0
+            },
+            "type": "VI",
+            "available": false
         }
     ],
     "expenditure": [],
