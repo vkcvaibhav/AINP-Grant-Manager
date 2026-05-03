@@ -122,9 +122,8 @@ def process_upload_with_ai(uploaded_file, prompt_task):
         # Send the text prompt and the raw PDF directly to Gemini
         response = model_pro.generate_content([full_prompt, pdf_data])
         
-        # Parse JSON from response
-        json_str = response.text.replace('```json', '').replace('
-```', '').strip()
+        # Parse JSON from response (MUST BE ON ONE LINE)
+        json_str = response.text.replace('```json', '').replace('```', '').strip()
         extracted_data = json.loads(json_str)
         return extracted_data
 
