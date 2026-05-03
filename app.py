@@ -3,9 +3,6 @@ import os
 import json
 import pandas as pd
 from datetime import datetime, date
-from PIL import Image
-import pytesseract
-import pdfplumber
 import google.generativeai as genai
 from docx import Document
 from docx.shared import Inches, Pt
@@ -26,7 +23,7 @@ for d in DIRS:
 # AI Setup
 api_key = st.secrets.get("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
-model_pro = genai.GenerativeModel('gemini-3.1-pro-preview')   
+model_pro = genai.GenerativeModel('gemini-1.5-pro-latest')   
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
@@ -275,13 +272,13 @@ def main():
 
     # --- TAB 2: BUDGET INTAKE ---
     with tabs[1]:
-        st.header("Upload Budget Allocation / Revision PDF/Image")
+        st.header("Upload Budget Allocation / Revision PDF")
         st.write("Emails like: *'Revised Budget Allocation 2025-26 - NAU Centre, Navsari'*")
         
-        budget_file = st.file_uploader("Upload Budget Document", type=['pdf', 'png', 'jpg', 'jpeg'], key="budget_up")
+        budget_file = st.file_uploader("Upload Budget Document", type=['pdf'], key="budget_up")
         
         if budget_file and st.button("Analyze & Process Budget"):
-            with st.spinner("AI is analyzing budget structure..."):
+            with st.spinner("AI is analyzing budget PDF..."):
                 
                 budget_prompt = {
                     "context": f"Budget Allocation for AICRP/AINP Acarology scheme for Financial Year {selected_fy}.",
@@ -297,8 +294,21 @@ def main():
                 extracted_budget = process_upload_with_ai(budget_file, budget_prompt)
                 
                 if extracted_budget:
-                    st.success("Data Extracted Successfully!")
-                    st.json(extracted_budget)
+                    st.success("Document analyzed successfully!")
+                    
+                    # --- CLEAN UI DISPLAY ---
+                    is_rev = "Yes" if extracted_budget.get('is_revision') else "No"
+                    st.info(f"📅 **Document Date:** {extracted_budget.get('date')} | 🔄 **Is Revised Budget:** {is_rev}")
+                    
+                    if extracted_budget.get('heads'):
+                        # Convert to DataFrame for a beautiful table
+                        df_extracted = pd.DataFrame(extracted_budget['heads'])
+                        # Clean up column names for the UI
+                        df_extracted.columns = ["Budget Head", "ICAR Share (Lakhs)", "State Share (Lakhs)", "Total (Lakhs)"]
+                        st.dataframe(df_extracted, use_container_width=True, hide_index=True)
+                    else:
+                        st.warning("No budget heads could be found in the document.")
+                    # ------------------------
                     
                     budget_dict = {}
                     for head in extracted_budget.get('heads', []):
@@ -386,9 +396,9 @@ def main():
 
         st.divider()
         st.subheader("Activate Funds (Upload Comptroller Order)")
-        st.write("Once received, upload the *'compotrollar grant relased latter'* (image_7.png) to activate funds for utilization.")
+        st.write("Once received, upload the *'compotrollar grant relased latter'* to activate funds for utilization.")
         
-        comp_file = st.file_uploader("Upload Comptroller Office Order", type=['pdf', 'png', 'jpg'], key="comp_up")
+        comp_file = st.file_uploader("Upload Comptroller Office Order PDF", type=['pdf'], key="comp_up")
         
         inst_to_activate = st.selectbox("This order relates to installment:", [inst['type'] for inst in data['installments']], key="act_type")
 
