@@ -86,7 +86,15 @@
             }
         }
     },
-    "installments": [],
+    "installments": [
+        {
+            "date": "2026-02-12",
+            "amount": 100000.0,
+            "pfms_id": "CO22609036389",
+            "type": "II",
+            "available": false
+        }
+    ],
     "expenditure": [],
     "latest_quarter": "Q4 Release",
     "latest_date": "2026-01-28"
