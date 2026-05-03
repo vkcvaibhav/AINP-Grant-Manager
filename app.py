@@ -23,11 +23,11 @@ for d in DIRS:
 # AI Setup
 api_key = st.secrets.get("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
-model_pro = genai.GenerativeModel('gemini-3.1-pro-preview')   
+model_pro = genai.GenerativeModel('gemini-1.5-pro-latest')   
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
-ICAR_LOGO = 'logos/icar_logo.png' if os.path.exists('logos/icar_logo.png') else None
+ICAR_LOGO = 'logos/icar_logo.png' if os.path.exists('icar_logo.png') else None
 GUJARATI_FONT = 'fonts/NotoSansGujarati-Regular.ttf'
 
 # Define standard Heads
@@ -311,10 +311,10 @@ def main():
                         # Force creation of a dictionary with ALL 5 standard heads (defaulted to 0)
                         budget_dict = {h: {'icar': 0.0, 'state': 0.0, 'total': 0.0} for h in BUDGET_HEADS}
                         
-                        # --- STRICT 75:25 MATHEMATICAL ENFORCEMENT (WITH 100% TSP EXCEPTION) ---
                         for head in extracted_budget.get('heads', []):
                             extracted_total = float(head.get('total') or 0.0)
                             extracted_icar = float(head.get('icar_share') or 0.0)
+                            extracted_state = float(head.get('state_share') or 0.0)
                             raw_name = head.get('head_name', '').upper()
                             
                             # Match the AI's extracted name to the standard BUDGET_HEADS
@@ -326,22 +326,23 @@ def main():
                             elif "TSP" in raw_name: matched_head = BUDGET_HEADS[4]
                             
                             if matched_head:
-                                # Exception: TSP is always 100% ICAR share
                                 if "TSP" in matched_head.upper():
                                     final_total = extracted_total if extracted_total > 0 else extracted_icar
                                     budget_dict[matched_head]['total'] = round(final_total, 2)
                                     budget_dict[matched_head]['icar'] = round(final_total, 2)
                                     budget_dict[matched_head]['state'] = 0.0
                                 else:
-                                    # Standard 75:25 Split
-                                    if extracted_total == 0 and extracted_icar > 0:
+                                    # If the document ONLY gave us the ICAR share (like Quarterly Release letters), calculate the total
+                                    if extracted_total == 0 and extracted_icar > 0 and extracted_state == 0:
                                         final_total = extracted_icar / 0.75
+                                        budget_dict[matched_head]['total'] = round(final_total, 2)
+                                        budget_dict[matched_head]['icar'] = round(extracted_icar, 2)
+                                        budget_dict[matched_head]['state'] = round(final_total * 0.25, 2)
                                     else:
-                                        final_total = extracted_total
-
-                                    budget_dict[matched_head]['total'] = round(final_total, 2)
-                                    budget_dict[matched_head]['icar'] = round(final_total * 0.75, 2)
-                                    budget_dict[matched_head]['state'] = round(final_total * 0.25, 2)
+                                        # Use exactly what AI found (we allow user to edit it manually later)
+                                        budget_dict[matched_head]['total'] = round(extracted_total, 2)
+                                        budget_dict[matched_head]['icar'] = round(extracted_icar, 2)
+                                        budget_dict[matched_head]['state'] = round(extracted_state, 2)
                         
                         doc_date = extracted_budget.get('date', 'Unknown')
                         desc_lower = doc_type_input.lower()
@@ -386,7 +387,7 @@ def main():
                         save_data(data, selected_fy)
                         st.toast("Budget Data Saved to GitHub & PDF saved locally!")
 
-        # --- BUDGET VISUALIZATION & EDITING ---
+        # --- BUDGET VISUALIZATION (MOVED FROM DASHBOARD) ---
         st.divider()
         st.subheader("📑 Uploaded Budget Documents (Editable)")
         
@@ -397,9 +398,9 @@ def main():
                 if h in b_dict:
                     df_data.append({
                         "Budget Head": h,
-                        "ICAR Share (₹)": b_dict[h]['icar'],
-                        "State Share (₹)": b_dict[h]['state'],
-                        "Total (₹)": b_dict[h]['total']
+                        "ICAR Share (₹)": float(b_dict[h]['icar']),
+                        "State Share (₹)": float(b_dict[h]['state']),
+                        "Total (₹)": float(b_dict[h]['total'])
                     })
             
             if not df_data:
@@ -418,27 +419,32 @@ def main():
             
             col1, col2 = st.columns([1, 3])
             with col1:
-                if st.button(f"💾 Save & Recalculate", key=f"save_{dict_key}"):
+                if st.button(f"💾 Save Edits", key=f"save_{dict_key}"):
                     new_dict = {}
                     for index, row in edited_df.iterrows():
                         head = row["Budget Head"]
-                        raw_total = float(row["Total (₹)"])
                         raw_icar = float(row["ICAR Share (₹)"])
+                        raw_state = float(row["State Share (₹)"])
+                        raw_total = float(row["Total (₹)"])
                         
                         if "TSP" in head.upper():
-                            final_total = raw_total if raw_total > 0 else raw_icar
-                            new_dict[head] = {'icar': final_total, 'state': 0.0, 'total': final_total}
+                            new_dict[head] = {'icar': raw_icar, 'state': 0.0, 'total': raw_icar}
                         else:
-                            if raw_total == 0 and raw_icar > 0:
-                                final_total = raw_icar / 0.75
+                            # If user only typed ICAR and left everything else 0, auto-calculate 75/25
+                            if raw_icar > 0 and raw_state == 0 and raw_total == 0:
+                                calc_tot = raw_icar / 0.75
+                                new_dict[head] = {
+                                    'icar': raw_icar,
+                                    'state': round(calc_tot * 0.25, 2),
+                                    'total': round(calc_tot, 2)
+                                }
                             else:
-                                final_total = raw_total
-
-                            new_dict[head] = {
-                                'icar': round(final_total * 0.75, 2),
-                                'state': round(final_total * 0.25, 2),
-                                'total': round(final_total, 2)
-                            }
+                                # Trust the user's manual correction, just ensure total = icar + state
+                                new_dict[head] = {
+                                    'icar': raw_icar,
+                                    'state': raw_state,
+                                    'total': round(raw_icar + raw_state, 2)
+                                }
                     
                     if dict_key == 'allocation':
                         data['allocation'] = new_dict
@@ -448,7 +454,7 @@ def main():
                         data['quarterly_allocations'][dict_key] = new_dict
                         
                     save_data(data, selected_fy)
-                    st.success("Changes Saved & Recalculated!")
+                    st.success("Edits Saved Successfully!")
                     st.rerun()
 
             with col2:
