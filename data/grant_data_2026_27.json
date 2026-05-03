@@ -195,6 +195,23 @@
             },
             "type": "VI",
             "available": false
+        },
+        {
+            "date": "2025-11-11",
+            "quarter": "Q3",
+            "installment_num": "V",
+            "purpose": "GIA-Salary",
+            "pfms_id": "C112511319908",
+            "amount": 500000.0,
+            "heads": {
+                "Pay and Allowances": 500000.0,
+                "Travelling Allowances (TA)": 0.0,
+                "Other Recurring Contingencies (ORC)": 0.0,
+                "Non-Recurring Contingencies (Equipments/Works)": 0.0,
+                "TSP": 0.0
+            },
+            "type": "V",
+            "available": false
         }
     ],
     "expenditure": [],
