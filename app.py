@@ -98,30 +98,18 @@ def save_data(data, fy):
     backup_to_github(filename, json_str)
 
 
-# --- B. Document Processing (OCR & AI) ---
+#--- B. Document Processing (OCR & AI) ---
 def process_upload_with_ai(uploaded_file, prompt_task):
-    """Uses Gemini to read the file and extract JSON structured data."""
+    """Uses Gemini to natively read the PDF and extract JSON structured data."""
     try:
-        if uploaded_file.type == "application/pdf":
-            with pdfplumber.open(uploaded_file) as pdf:
-                full_text = ""
-                for page in pdf.pages:
-                    full_text += page.extract_text() + "\n"
-            
-            if full_text.strip():
-                content = full_text
-            else:
-                images = []
-                with pdfplumber.open(uploaded_file) as pdf:
-                    images.append(pdf.pages[0].to_image(resolution=200).original)
-                content = images 
-
-        elif "image" in uploaded_file.type:
-            image = Image.open(uploaded_file)
-            content = [image]
+        # Package the raw PDF file directly for Gemini
+        pdf_data = {
+            "mime_type": "application/pdf",
+            "data": uploaded_file.getvalue()
+        }
 
         full_prompt = f"""
-        Analyze the attached document content (text or image) and extract the required information 
+        Analyze the attached document content and extract the required information 
         as a structured JSON object.
 
         DOCUMENT TYPE/CONTEXT: {prompt_task['context']}
@@ -131,9 +119,12 @@ def process_upload_with_ai(uploaded_file, prompt_task):
         For currency, return numbers only (e.g., 100000). Convert dates to YYYY-MM-DD format.
         """
         
-        response = model_pro.generate_content([full_prompt, content] if isinstance(content, list) else [full_prompt, content])
+        # Send the text prompt and the raw PDF directly to Gemini
+        response = model_pro.generate_content([full_prompt, pdf_data])
         
-        json_str = response.text.replace('```json', '').replace('```', '').strip()
+        # Parse JSON from response
+        json_str = response.text.replace('```json', '').replace('
+```', '').strip()
         extracted_data = json.loads(json_str)
         return extracted_data
 
