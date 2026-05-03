@@ -9,7 +9,7 @@ from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from fpdf import FPDF
 import io
-from github import Github  # <-- NEW: Added for GitHub backups
+from github import Github  # <-- Added for GitHub backups
 
 # --- 1. CONFIGURATION & SETUP ---
 st.set_page_config(page_title="AINP Grant Manager", page_icon="🌾", layout="wide")
@@ -23,7 +23,7 @@ for d in DIRS:
 # AI Setup
 api_key = st.secrets.get("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
-model_pro = genai.GenerativeModel('gemini-3.1-pro-preview')   
+model_pro = genai.GenerativeModel('gemini-1.5-pro-latest')   
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
@@ -95,7 +95,7 @@ def save_data(data, fy):
     backup_to_github(filename, json_str)
 
 
-# --- B. Document Processing (OCR & AI) ---
+# --- B. Document Processing (AI PDF Reader) ---
 def process_upload_with_ai(uploaded_file, prompt_task):
     """Uses Gemini to natively read the PDF and extract JSON structured data."""
     try:
@@ -296,14 +296,22 @@ def main():
                 if extracted_budget:
                     st.success("Document analyzed successfully!")
                     
+                    # --- STRICT 75:25 MATHEMATICAL ENFORCEMENT ---
+                    # We override the AI's extraction here to ensure perfect math
+                    for head in extracted_budget.get('heads', []):
+                        total_val = float(head.get('total') or 0.0)
+                        
+                        # Force exactly 75% for ICAR and 25% for State based on Total
+                        head['total'] = total_val
+                        head['icar_share'] = round(total_val * 0.75, 2)
+                        head['state_share'] = round(total_val * 0.25, 2)
+                    
                     # --- CLEAN UI DISPLAY ---
                     is_rev = "Yes" if extracted_budget.get('is_revision') else "No"
                     st.info(f"📅 **Document Date:** {extracted_budget.get('date')} | 🔄 **Is Revised Budget:** {is_rev}")
                     
                     if extracted_budget.get('heads'):
-                        # Convert to DataFrame for a beautiful table
                         df_extracted = pd.DataFrame(extracted_budget['heads'])
-                        # Clean up column names for the UI
                         df_extracted.columns = ["Budget Head", "ICAR Share (Lakhs)", "State Share (Lakhs)", "Total (Lakhs)"]
                         st.dataframe(df_extracted, use_container_width=True, hide_index=True)
                     else:
