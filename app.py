@@ -23,7 +23,7 @@ for d in DIRS:
 # AI Setup
 api_key = st.secrets.get("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
-model_pro = genai.GenerativeModel('gemini-3.1-pro-preview')   
+model_pro = genai.GenerativeModel('gemini-1.5-pro-latest')   
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
@@ -73,12 +73,17 @@ def load_data(fy):
     filename = get_fy_filename(fy)
     if os.path.exists(filename):
         with open(filename, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
+            # Ensure new quarterly structure exists in old data files
+            if 'quarterly_allocations' not in data:
+                data['quarterly_allocations'] = {"Q1": {}, "Q2": {}, "Q3": {}, "Q4": {}}
+            return data
     else:
         return {
             "financial_year": fy,
             "allocation": {}, 
             "revised_allocation": {},
+            "quarterly_allocations": {"Q1": {}, "Q2": {}, "Q3": {}, "Q4": {}},
             "installments": [], 
             "expenditure": [],
             "latest_quarter": "Full Year", 
@@ -255,41 +260,81 @@ def main():
     with tabs[0]:
         st.header(f"Financial Year {selected_fy}")
         
-        # Display Quarter and Date Info
         current_qtr = data.get('latest_quarter', 'Full Year')
         last_date = data.get('latest_date', 'N/A')
         st.markdown(f"**Current Active Budget Period:** {current_qtr} | **Last Document Date:** {last_date}")
         
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            total_allocated = sum(v.get('total', 0) for k,v in data['revised_allocation'].items()) if data['revised_allocation'] else 0
-            st.metric("Total Sanctioned Budget", f"₹{total_allocated:,}")
-        with col2:
-            total_received = sum(inst['amount'] for inst in data['installments'])
-            st.metric("Total Funds Received (PFMS)", f"₹{total_received:,}")
-        with col3:
-            st.metric("Pending Received", "Calculated later")
+        # 1. Show Document Data Blocks (Clickable Expanders)
+        st.divider()
+        st.subheader("📑 Uploaded Budget Documents")
+        
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if data.get('allocation'):
+                with st.expander("📄 Initial Full-Year Budget Allocation"):
+                    st.dataframe(pd.DataFrame.from_dict(data['allocation'], orient='index'), use_container_width=True)
+        with col_b:
+            if data.get('revised_allocation'):
+                with st.expander("📄 Revised Full-Year Budget Allocation"):
+                    st.dataframe(pd.DataFrame.from_dict(data['revised_allocation'], orient='index'), use_container_width=True)
+                    
+        st.write("📅 **Quarterly Releases (Click to view data)**")
+        q_cols = st.columns(4)
+        for i, q in enumerate(["Q1", "Q2", "Q3", "Q4"]):
+            q_data = data['quarterly_allocations'].get(q)
+            if q_data:
+                with q_cols[i]:
+                    with st.expander(f"📄 {q} Release Data"):
+                        st.dataframe(pd.DataFrame.from_dict(q_data, orient='index'), use_container_width=True)
+                        
+        st.divider()
+        
+        # 2. Total Mismatch/Status Table
+        active_budget = data.get('revised_allocation') or data.get('allocation')
+        if active_budget:
+            st.subheader("⚖️ Allocation vs. Quarterly Release Mismatch")
+            mismatch_data = {}
             
-        st.subheader("Budget Head Overview")
-        if data['revised_allocation']:
-            df_budget = pd.DataFrame.from_dict(data['revised_allocation'], orient='index')
-            st.dataframe(df_budget, use_container_width=True)
+            for head, vals in active_budget.items():
+                tot_alloc = vals.get('total', 0)
+                
+                # Sum the quarterly totals for this specific head
+                q_sum = 0
+                for q in ["Q1", "Q2", "Q3", "Q4"]:
+                    if data['quarterly_allocations'].get(q):
+                        q_sum += data['quarterly_allocations'][q].get(head, {}).get('total', 0)
+                        
+                mismatch = tot_alloc - q_sum
+                mismatch_data[head] = {
+                    "Total Sanctioned (Lakhs)": round(tot_alloc, 2),
+                    "Released Q1-Q4 (Lakhs)": round(q_sum, 2),
+                    "Pending/Mismatch (Lakhs)": round(mismatch, 2)
+                }
+                
+            st.dataframe(pd.DataFrame.from_dict(mismatch_data, orient='index'), use_container_width=True)
         else:
-            st.info("Upload budget allocation to begin.")
+            st.info("Upload budget allocation to view Mismatch Table.")
 
     # --- TAB 2: BUDGET INTAKE ---
     with tabs[1]:
         st.header("Upload Budget Allocation / Revision PDF")
         
-        # Instructions for the user and AI
         st.markdown("""
         **Instructions for Uploading:**
         Select the specific type of document you are uploading to help the AI accurately extract the data.
         *   **Initial / Revised Allocation:** Full year budget documents with Total, ICAR, and State shares.
-        *   **Quarterly Release:** Letters (e.g., *3rd Quarter* or *4th Quarter*) that typically only show the **ICAR Share**. The system will automatically calculate the 25% State Share and the Total amount based on the ICAR value!
+        *   **Quarterly Release:** Letters (e.g., *Q1, Q2, Q3, Q4*) that typically only show the **ICAR Share**. The system will automatically calculate the 25% State Share and the Total amount based on the ICAR value!
         """)
         
-        doc_type = st.radio("Select Document Type:", ["Initial Allocation", "Revised Allocation", "Quarterly Release (e.g., Q3, Q4)"])
+        doc_type = st.radio("Select Document Type:", [
+            "Initial Allocation", 
+            "Revised Allocation", 
+            "Q1 Release", 
+            "Q2 Release", 
+            "Q3 Release", 
+            "Q4 Release"
+        ])
+        
         budget_file = st.file_uploader("Upload Budget Document", type=['pdf'], key="budget_up")
         
         if budget_file and st.button("Analyze & Process Budget"):
@@ -299,7 +344,6 @@ def main():
                     "context": f"Document Type: {doc_type}. Scheme: AICRP/AINP Acarology. Financial Year: {selected_fy}. Extract the budget allocation table.",
                     "structure": {
                         "is_revision": "boolean (true if this revises a previous allocation)",
-                        "quarter_period": "string (e.g., '3rd Quarter', '4th Quarter', or 'Full Year' if not specified)",
                         "date": "YYYY-MM-DD",
                         "heads": [
                             {"head_name": "string (e.g., Pay & Allowances, Recurring Contingencies)", "icar_share": 0.0, "state_share": 0.0, "total": 0.0}
@@ -326,7 +370,6 @@ def main():
                             head['state_share'] = 0.0
                         else:
                             # Standard 75:25 Split
-                            # If the document ONLY gave us the ICAR share (like Quarterly Release letters), calculate the total from it
                             if extracted_total == 0 and extracted_icar > 0:
                                 final_total = extracted_icar / 0.75
                             else:
@@ -337,10 +380,10 @@ def main():
                             head['state_share'] = round(final_total * 0.25, 2)
                     
                     # --- CLEAN UI DISPLAY ---
-                    qtr_val = extracted_budget.get('quarter_period', 'Full Year')
+                    is_rev = "Yes" if doc_type == "Revised Allocation" else "No"
                     doc_date = extracted_budget.get('date', 'Unknown')
                     
-                    st.info(f"📅 **Document Date:** {doc_date} | 🕒 **Period/Quarter:** {qtr_val} | 🔄 **Type:** {doc_type}")
+                    st.info(f"📅 **Document Date:** {doc_date} | 🔄 **Type:** {doc_type}")
                     
                     if extracted_budget.get('heads'):
                         df_extracted = pd.DataFrame(extracted_budget['heads'])
@@ -358,14 +401,16 @@ def main():
                             'total': head['total']
                         }
                     
-                    # Update data dictionary based on Document Type
+                    # Route data to correct storage location based on Radio Button
                     if doc_type == "Initial Allocation":
                         data['allocation'] = budget_dict
-                    else:
-                        # Both Revisions and Quarterly Releases act as the newest active budget
+                    elif doc_type == "Revised Allocation":
                         data['revised_allocation'] = budget_dict
+                    else:
+                        q_key = doc_type.split(" ")[0] # Extracts "Q1", "Q2", etc.
+                        data['quarterly_allocations'][q_key] = budget_dict
                     
-                    data['latest_quarter'] = qtr_val
+                    data['latest_quarter'] = doc_type
                     data['latest_date'] = doc_date
                     
                     save_data(data, selected_fy)
