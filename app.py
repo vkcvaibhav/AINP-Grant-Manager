@@ -3,8 +3,6 @@ import os
 import json
 import pandas as pd
 from datetime import datetime, date
-from PIL import Image
-import pytesseract
 import pdfplumber
 import google.generativeai as genai
 from docx import Document
@@ -12,7 +10,7 @@ from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from fpdf import FPDF
 import io
-from github import Github  # <-- NEW: Added for GitHub backups
+from github import Github  # <-- Added for GitHub backups
 
 # --- 1. CONFIGURATION & SETUP ---
 st.set_page_config(page_title="AINP Grant Manager", page_icon="🌾", layout="wide")
@@ -26,7 +24,7 @@ for d in DIRS:
 # AI Setup
 api_key = st.secrets.get("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
-model_pro = genai.GenerativeModel('gemini-3.1-pro-preview')   
+model_pro = genai.GenerativeModel('gemini-1.5-pro-latest')   
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
@@ -108,17 +106,18 @@ def process_upload_with_ai(uploaded_file, prompt_task):
                 for page in pdf.pages:
                     full_text += page.extract_text() + "\n"
             
+            # Use text prompt if native PDF text extraction works well
             if full_text.strip():
                 content = full_text
             else:
+                # If it is a scanned PDF (no selectable text), fall back to reading the first page as an image
                 images = []
                 with pdfplumber.open(uploaded_file) as pdf:
                     images.append(pdf.pages[0].to_image(resolution=200).original)
                 content = images 
-
-        elif "image" in uploaded_file.type:
-            image = Image.open(uploaded_file)
-            content = [image]
+        else:
+            st.error("Unsupported file type. Please upload a PDF.")
+            return None
 
         full_prompt = f"""
         Analyze the attached document content (text or image) and extract the required information 
@@ -285,10 +284,11 @@ def main():
 
     # --- TAB 2: BUDGET INTAKE ---
     with tabs[1]:
-        st.header("Upload Budget Allocation / Revision PDF/Image")
+        st.header("Upload Budget Allocation / Revision PDF")
         st.write("Emails like: *'Revised Budget Allocation 2025-26 - NAU Centre, Navsari'*")
         
-        budget_file = st.file_uploader("Upload Budget Document", type=['pdf', 'png', 'jpg', 'jpeg'], key="budget_up")
+        # Only PDF uploads allowed here now
+        budget_file = st.file_uploader("Upload Budget Document", type=['pdf'], key="budget_up")
         
         if budget_file and st.button("Analyze & Process Budget"):
             with st.spinner("AI is analyzing budget structure..."):
@@ -331,6 +331,7 @@ def main():
         st.header("Recieved Grant Installment (PFMS Advice)")
         st.write("Mail attachment like: *'12 02 2026 100000.pdf'*")
         
+        # Only PDF uploads allowed here
         pfms_file = st.file_uploader("Upload PFMS Receipt PDF", type=['pdf'], key="pfms_up")
         inst_type = st.selectbox("Installment Number (e.g. from mail body)", ["I", "II", "III", "IV", "V", "Revised I"], key="inst_type")
 
@@ -396,9 +397,10 @@ def main():
 
         st.divider()
         st.subheader("Activate Funds (Upload Comptroller Order)")
-        st.write("Once received, upload the *'compotrollar grant relased latter'* (image_7.png) to activate funds for utilization.")
+        st.write("Once received, upload the *'compotrollar grant relased latter'* to activate funds for utilization.")
         
-        comp_file = st.file_uploader("Upload Comptroller Office Order", type=['pdf', 'png', 'jpg'], key="comp_up")
+        # Only PDF uploads allowed here
+        comp_file = st.file_uploader("Upload Comptroller Office Order", type=['pdf'], key="comp_up")
         
         inst_to_activate = st.selectbox("This order relates to installment:", [inst['type'] for inst in data['installments']], key="act_type")
 
