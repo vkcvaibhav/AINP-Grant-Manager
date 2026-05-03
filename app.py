@@ -113,7 +113,7 @@ def process_upload_with_ai(uploaded_file, prompt_task):
             else:
                 images = []
                 with pdfplumber.open(uploaded_file) as pdf:
-                    images.append(pdf.pages[0].to_image(dpi=200).original)
+                    images.append(pdf.pages[0].to_image(resolution=200).original)
                 content = images 
 
         elif "image" in uploaded_file.type:
