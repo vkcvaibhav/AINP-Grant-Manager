@@ -23,7 +23,7 @@ for d in DIRS:
 # AI Setup
 api_key = st.secrets.get("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
-model_pro = genai.GenerativeModel('gemini-3.1-pro-preview')   
+model_pro = genai.GenerativeModel('gemini-1.5-pro-latest')   
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
@@ -296,15 +296,22 @@ def main():
                 if extracted_budget:
                     st.success("Document analyzed successfully!")
                     
-                    # --- STRICT 75:25 MATHEMATICAL ENFORCEMENT ---
+                    # --- STRICT 75:25 MATHEMATICAL ENFORCEMENT (WITH 100% TSP EXCEPTION) ---
                     # We override the AI's extraction here to ensure perfect math
                     for head in extracted_budget.get('heads', []):
                         total_val = float(head.get('total') or 0.0)
+                        head_name = head.get('head_name', '').upper()
                         
-                        # Force exactly 75% for ICAR and 25% for State based on Total
                         head['total'] = total_val
-                        head['icar_share'] = round(total_val * 0.75, 2)
-                        head['state_share'] = round(total_val * 0.25, 2)
+                        
+                        # Exception: TSP is always 100% ICAR share
+                        if "TSP" in head_name:
+                            head['icar_share'] = round(total_val * 1.00, 2)
+                            head['state_share'] = 0.0
+                        else:
+                            # Force exactly 75% for ICAR and 25% for State based on Total
+                            head['icar_share'] = round(total_val * 0.75, 2)
+                            head['state_share'] = round(total_val * 0.25, 2)
                     
                     # --- CLEAN UI DISPLAY ---
                     is_rev = "Yes" if extracted_budget.get('is_revision') else "No"
