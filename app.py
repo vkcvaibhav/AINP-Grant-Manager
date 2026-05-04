@@ -1876,8 +1876,8 @@ def main():
                 )
 
 # =====================================================================
-        # 👇 NEW SECTION: TAB 6 - AUC GENERATION 👇
-        # =====================================================================
+    # 👇 NEW SECTION: TAB 6 - AUC GENERATION 👇
+    # =====================================================================
     with tabs[6]:
         st.header("Audit Utilization Certificate (AUC) & Forwarding Letter")
         st.write("Generate the final year-end AUC and its corresponding Gujarati forwarding letter.")
@@ -1976,6 +1976,28 @@ def main():
             "tot_icar_exp": format_inr_auc(tot_icar_exp)
         }
 
+        # --- LIVE PREVIEW SECTION ---
+        st.divider()
+        st.subheader("👀 AUC Live Preview")
+        
+        st.markdown("**Received Installments:**")
+        st.table(pd.DataFrame(inst_data, columns=["Sr.No", "Letter No and Date", "Amount"]))
+        
+        st.markdown("**Form of Utilization Certificate & Audit Utilization Certificate**")
+        st.markdown(f"1. Certified that the out of Rs. **{text_vars['tot_remittance']}** sanctioned during the year **{selected_fy}** in favour of Comptroller, NAU, Navsari under this Ministry/Department Letter No. given in the margin and Rs. **{text_vars['opening_bal']}** on account of unspent balance of the previous year, a sum of Rs. **{text_vars['tot_icar_exp']}** has been Utilized for the purpose of Agril. Acarology Research and remaining unutilized at the end of the year has been surrendered (vide No......Dated......) will be adjusted (to be payable the next year).")
+        st.markdown("2. Certified that I have satisfied myself that the condition on which the expenditure was made have dully fulfilled/are being fulfilled and that I have exercised the following check to see that the money was actually utilized for the purpose for which it was sanctioned.")
+        
+        st.markdown("**Table 1: Showing the details of receipt and expenditure figure (in Rupees)**")
+        t1_columns = [f"Opening balance as on 1st April {fy_start_year}", f"Remittance Received {selected_fy}", "Receipt", f"ICAR share of Exp during {selected_fy}", f"Closing balance as on 31st March {fy_end_year}"]
+        st.table(pd.DataFrame([t1_data], columns=t1_columns))
+        
+        st.markdown("**Table 2: Showing the head wise details of expenditure figure (in Rupees)**")
+        t2_columns = ["Head", f"Allocation for the Year {selected_fy} (100%)", "ICAR share of Expenditure (75%)", "State Share (25%)", "Total Expenditure"]
+        st.table(pd.DataFrame(t2_data, columns=t2_columns))
+        
+        st.divider()
+
+        # --- DOWNLOAD BUTTONS SECTION ---
         col_a, col_b = st.columns(2)
         with col_a:
             st.subheader("1. Audit Utilization Certificate (AUC)")
@@ -1988,11 +2010,10 @@ def main():
         with col_b:
             st.subheader("2. AUC Forwarding Letter")
             
-            # ---> ADDED UNIQUE KEYS TO ALL INPUTS BELOW <---
             ref_no = st.text_input("Reference No. (જા.નં. એસીએન/એન્ટો/___/૨૦૨૬):", value="AUC", key="auc_ref_no")
             letter_date = st.text_input("Date (તારીખ):", value=datetime.now().strftime("%d/%m/%Y"), key="auc_letter_date")
             subj = st.text_area("Subject (વિષય):", value=f"AINP on Agricultural Acarology (BH.303/2092) નું વર્ષ {selected_fy} નુ Audit Utilization Certificate (AUC) મોકલવા બાબત.", key="auc_subject")
-            body = st.text_area("Body Text:", value="જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે ચાલતી આઈ.સી.એ.આર. યોજના AINP on Agricultural Acarology (BH.303/2092) નું વર્ષ 2025-26 નુ Audit Utilization Certificate (AUC) આ સાથે સામેલ રાખી મોકલી આપીએ છીએ.", key="auc_body_text")
+            body = st.text_area("Body Text:", value=f"જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે ચાલતી આઈ.સી.એ.આર. યોજના AINP on Agricultural Acarology (BH.303/2092) નું વર્ષ {selected_fy} નુ Audit Utilization Certificate (AUC) આ સાથે સામેલ રાખી મોકલી આપીએ છીએ.", key="auc_body_text")
             
             if st.button("📥 Generate & Download Forwarding Letter", key="auc_download_btn"):
                 with st.spinner("Generating Letter..."):
