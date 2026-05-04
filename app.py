@@ -1094,8 +1094,48 @@ def main():
                 (df_exp['date'].dt.strftime('%B') == month_to_process) & 
                 (df_exp['date'].dt.year == year_to_process)
             ]
-            st.subheader(f"Spend in {month_to_process} {year_to_process}")
+            st.subheader(f"Spend list for {month_to_process} {year_to_process}")
             st.dataframe(current_month_exp, use_container_width=True)
+            
+            st.divider()
+            
+            # --- SUMMARY TABLES SECTION ---
+            col_sum1, col_sum2 = st.columns(2)
+            
+            # 1. Monthly Summary Table
+            with col_sum1:
+                st.markdown(f"**📊 Monthly Summary ({month_to_process} {year_to_process})**")
+                
+                # Initialize dictionary with all standard heads set to 0
+                monthly_summary = {head: 0.0 for head in BUDGET_HEADS}
+                
+                # If there are expenses this month, update the dictionary
+                if not current_month_exp.empty:
+                    month_grouped = current_month_exp.groupby('head')['amount'].sum().to_dict()
+                    monthly_summary.update(month_grouped)
+                
+                # Convert to DataFrame for clean display
+                df_month_sum = pd.DataFrame(list(monthly_summary.items()), columns=['Budget Head', 'Amount (₹)'])
+                st.dataframe(df_month_sum, use_container_width=True, hide_index=True)
+
+            # 2. Yearly (FY) Summary Table with Grand Total
+            with col_sum2:
+                st.markdown(f"**📈 Yearly Summary (FY {selected_fy})**")
+                
+                # Initialize dictionary with all standard heads set to 0
+                yearly_summary = {head: 0.0 for head in BUDGET_HEADS}
+                
+                # Update with actual yearly sums
+                year_grouped = df_exp.groupby('head')['amount'].sum().to_dict()
+                yearly_summary.update(year_grouped)
+                
+                df_year_sum = pd.DataFrame(list(yearly_summary.items()), columns=['Budget Head', 'Amount (₹)'])
+                
+                # Add "Grand Total" Row at the bottom
+                total_amount = df_year_sum['Amount (₹)'].sum()
+                df_year_sum.loc[len(df_year_sum)] = ['**GRAND TOTAL**', total_amount]
+                
+                st.dataframe(df_year_sum, use_container_width=True, hide_index=True)
 
 
     # --- TAB 6: SOE GENERATION ---
