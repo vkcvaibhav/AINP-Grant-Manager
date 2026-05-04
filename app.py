@@ -1058,7 +1058,7 @@ def main():
                 st.success(f"Funds for Installment {inst_to_activate} are now READY FOR UTILIZATION.")
 
 
-   # --- TAB 5: MONTHLY SPEND ---
+# --- TAB 5: MONTHLY SPEND ---
     with tabs[4]:
         st.header("Monthly Expenditure Tracking")
         
@@ -1066,24 +1066,41 @@ def main():
         month_to_process = st.selectbox("Month", [datetime(2000, m, 1).strftime('%B') for m in range(1, 13)], index=today.month-1)
         year_to_process = st.number_input("Year", value=today.year, min_value=2024, max_value=2030)
 
+        # 1. Define the exact SOE mapped categories
+        soe_categories = [
+            "Recurring Contingencies - Establishment Charges",
+            "Recurring Contingencies - TA",
+            "Recurring Contingencies - Contingencies",
+            "Recurring Contingencies - TSP",
+            "Non Recurring Contingencies - Equipments",
+            "Non Recurring Contingencies - Works"
+        ]
+
         with st.expander("Add New Expenditure Entry", expanded=True):
             with st.form("spend_form", clear_on_submit=True):
                 col1, col2 = st.columns(2)
                 exp_date = col1.date_input("Expenditure Date")
-                exp_head = col1.selectbox("Budget Head", BUDGET_HEADS)
+                
+                # 2. Use the new specific categories in the dropdown
+                selected_head = col1.selectbox("Budget Head (Mapped to SOE)", soe_categories)
+                
                 exp_amt = col2.number_input("Amount Spent (₹)", min_value=0.0)
                 exp_detail = col2.text_area("Expenditure Details/Voucher Info")
                 
                 if st.form_submit_button("Add Entry"):
+                    # 3. Split the selection so the database knows exactly where this goes in the SOE
+                    main_cat, sub_cat = selected_head.split(" - ")
+                    
                     new_exp = {
                         "date": exp_date.strftime("%Y-%m-%d"),
-                        "head": exp_head,
+                        "head": main_cat,        # "Recurring Contingencies" or "Non Recurring..."
+                        "sub_head": sub_cat,     # "TA", "Works", "Establishment Charges", etc.
                         "detail": exp_detail,
                         "amount": exp_amt
                     }
                     data['expenditure'].append(new_exp)
                     save_data(data, selected_fy)
-                    st.toast("Expenditure Added and Backed up.")
+                    st.toast(f"Expenditure added directly to {sub_cat}!")
 
         # Re-initialize df_exp here so both this tab and the chatbot can see it
         df_exp = pd.DataFrame(data.get('expenditure', []))
@@ -1095,7 +1112,14 @@ def main():
                 (df_exp['date'].dt.year == year_to_process)
             ]
             st.subheader(f"Spend in {month_to_process} {year_to_process}")
-            st.dataframe(current_month_exp, use_container_width=True)
+            
+            # 4. Display the table cleanly with the new Main/Sub structure
+            if not current_month_exp.empty:
+                display_df = current_month_exp[['date', 'head', 'sub_head', 'detail', 'amount']].copy()
+                display_df.columns = ["Date", "Main Category", "SOE Sub-Head", "Details", "Amount (₹)"]
+                st.dataframe(display_df, use_container_width=True)
+            else:
+                st.info(f"No expenditure recorded for {month_to_process} {year_to_process}.")
 
     # --- TAB 6: SOE GENERATION ---
     with tabs[5]:
