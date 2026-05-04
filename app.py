@@ -1151,7 +1151,7 @@ def main():
                 st.dataframe(df_year_sum, use_container_width=True, hide_index=True)
 
 
-   # --- TAB 6: SOE GENERATION ---
+# --- TAB 6: SOE GENERATION ---
     with tabs[5]:
         st.header("Statement of Expenditure (SOE) Generation")
         
@@ -1189,15 +1189,24 @@ def main():
             
         with st.expander(f"⚙️ Set Opening Balances for FY {selected_fy}"):
             st.write(f"Save the opening balances carried forward as on 01.04.{fy_start_year}.")
-            with st.form("ob_form"):
+            
+            # ---> FIX 1: Unique Form Key for the Financial Year <---
+            with st.form(f"ob_form_{selected_fy}"):
                 cols = st.columns(3)
                 new_obs = {}
                 for idx, (k, v) in enumerate(data['opening_balances'].items()):
-                    new_obs[k] = cols[idx % 3].number_input(f"{k} (₹)", value=float(v), step=1000.0)
+                    # ---> FIX 2: Added a unique 'key' so Streamlit resets the box when the year changes <---
+                    new_obs[k] = cols[idx % 3].number_input(
+                        f"{k} (₹)", 
+                        value=float(v), 
+                        step=1000.0,
+                        key=f"ob_input_{k}_{selected_fy}"
+                    )
                 if st.form_submit_button("💾 Save Opening Balances"):
                     data['opening_balances'] = new_obs
                     save_data(data, selected_fy)
-                    st.success("Opening Balances Saved!")
+                    st.success(f"Opening Balances Saved for {selected_fy}!")
+                    st.rerun() # ---> FIX 3: Instantly refresh the page to apply the balances to the table below <---
 
         st.divider()
         st.markdown(f"<h3 style='text-align: center;'>Statement of Expenditure for the month of {soe_month} {soe_year}</h3>", unsafe_allow_html=True)
@@ -1293,7 +1302,6 @@ def main():
                 soe_doc_buffer = create_word_doc(edited_df, soe_month, soe_year, last_day)
                 st.success("SOE Generated with dynamic dates and calculations!")
                 
-                # ---> SYNTAX ERROR FIXED HERE <---
                 st.download_button(
                     label="📥 Download SOE Word File",
                     data=soe_doc_buffer,
