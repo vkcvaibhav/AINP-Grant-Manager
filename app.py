@@ -180,7 +180,7 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
     # Left Logo (NAU)
     if 'NAU_LOGO' in globals() and NAU_LOGO and os.path.exists(NAU_LOGO):
         p_left = table.cell(0, 0).paragraphs[0]
-        p_left.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_left.alignment = WD_ALIGN_PARAGRAPH.BOTTOM
         r_left = p_left.add_run()
         r_left.add_picture(NAU_LOGO, width=Inches(1.8))
         
