@@ -1099,7 +1099,7 @@ def main():
             
             st.divider()
             
-            # --- SUMMARY TABLES SECTION ---
+# --- SUMMARY TABLES SECTION ---
             col_sum1, col_sum2 = st.columns(2)
             
             # 1. Monthly Summary Table
@@ -1116,6 +1116,11 @@ def main():
                 
                 # Convert to DataFrame for clean display
                 df_month_sum = pd.DataFrame(list(monthly_summary.items()), columns=['Budget Head', 'Amount (₹)'])
+                
+                # Add "Grand Total" Row at the bottom for the Month
+                total_month_amount = df_month_sum['Amount (₹)'].sum()
+                df_month_sum.loc[len(df_month_sum)] = ['**GRAND TOTAL**', total_month_amount]
+                
                 st.dataframe(df_month_sum, use_container_width=True, hide_index=True)
 
             # 2. Yearly (FY) Summary Table with Grand Total
@@ -1131,7 +1136,7 @@ def main():
                 
                 df_year_sum = pd.DataFrame(list(yearly_summary.items()), columns=['Budget Head', 'Amount (₹)'])
                 
-                # Add "Grand Total" Row at the bottom
+                # Add "Grand Total" Row at the bottom for the Year
                 total_amount = df_year_sum['Amount (₹)'].sum()
                 df_year_sum.loc[len(df_year_sum)] = ['**GRAND TOTAL**', total_amount]
                 
