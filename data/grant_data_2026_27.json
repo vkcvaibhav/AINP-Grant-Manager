@@ -95,6 +95,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "",
             "amount": 30000.0
+        },
+        {
+            "date": "2026-05-04",
+            "head": "Non-Recurring Contingencies (Equipments/Works)",
+            "detail": "",
+            "amount": 300000.0
         }
     ],
     "latest_quarter": "Q4 Release",
