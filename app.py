@@ -1959,15 +1959,17 @@ def main():
                     
         with col_b:
             st.subheader("2. AUC Forwarding Letter")
-            ref_no = st.text_input("Reference No. (જા.નં. એસીએન/એન્ટો/___/૨૦૨૬):", value="AUC")
-            letter_date = st.text_input("Date (તારીખ):", value=datetime.now().strftime("%d/%m/%Y"))
-            subj = st.text_area("Subject (વિષય):", value=f"AINP on Agricultural Acarology (BH.303/2092) નું વર્ષ {selected_fy} નુ Audit Utilization Certificate (AUC) મોકલવા બાબત.")
-            body = st.text_area("Body Text:", value="જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે ચાલતી આઈ.સી.એ.આર. યોજના AINP on Agricultural Acarology (BH.303/2092) નું વર્ષ 2025-26 નુ Audit Utilization Certificate (AUC) આ સાથે સામેલ રાખી મોકલી આપીએ છીએ.")
             
-            if st.button("📥 Generate & Download Forwarding Letter"):
+            # ---> ADDED UNIQUE KEYS TO ALL INPUTS BELOW <---
+            ref_no = st.text_input("Reference No. (જા.નં. એસીએન/એન્ટો/___/૨૦૨૬):", value="AUC", key="auc_ref_no")
+            letter_date = st.text_input("Date (તારીખ):", value=datetime.now().strftime("%d/%m/%Y"), key="auc_letter_date")
+            subj = st.text_area("Subject (વિષય):", value=f"AINP on Agricultural Acarology (BH.303/2092) નું વર્ષ {selected_fy} નુ Audit Utilization Certificate (AUC) મોકલવા બાબત.", key="auc_subject")
+            body = st.text_area("Body Text:", value="જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે ચાલતી આઈ.સી.એ.આર. યોજના AINP on Agricultural Acarology (BH.303/2092) નું વર્ષ 2025-26 નુ Audit Utilization Certificate (AUC) આ સાથે સામેલ રાખી મોકલી આપીએ છીએ.", key="auc_body_text")
+            
+            if st.button("📥 Generate & Download Forwarding Letter", key="auc_download_btn"):
                 with st.spinner("Generating Letter..."):
                     fw_doc = generate_auc_forwarding_docx(ref_no, letter_date, subj, body)
-                    st.download_button("Download Forwarding Letter (.docx)", data=fw_doc, file_name=f"AUC_Forwarding_Letter_{selected_fy}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                    st.download_button("Download Forwarding Letter (.docx)", data=fw_doc, file_name=f"AUC_Forwarding_Letter_{selected_fy}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key="auc_final_dl_btn")
 
     # --- TAB 7: AI CHATBOT ---
     with tabs[7]:  # <--- MAKE SURE THIS IS CHANGED TO 7
