@@ -453,7 +453,7 @@ def main():
     
     data = load_data(selected_fy)
     
-    tabs = st.tabs(["📊 Dashboard", "📤 1. Budget Intake", "💰 2. Installments (PFMS)", "📝 3. Generated Letters", "💸 4. Monthly Spend", "🤖 AI Chatbot"])
+    tabs = st.tabs(["📊 Dashboard", "📤 1. Budget Intake", "💰 2. Installments (PFMS)", "📝 3. Generated Letters", "💸 4. Monthly Spend", "📄 5. SOE Generation", "🤖 AI Chatbot"])
     
     # --- TAB 1: DASHBOARD ---
     with tabs[0]:
@@ -1058,9 +1058,48 @@ def main():
                 st.success(f"Funds for Installment {inst_to_activate} are now READY FOR UTILIZATION.")
 
 
-   # --- TAB 5: MONTHLY SPEND & SOE ---
+   # --- TAB 5: MONTHLY SPEND ---
     with tabs[4]:
-        st.header("Monthly Expenditure & SOE Generation")
+        st.header("Monthly Expenditure Tracking")
+        
+        today = date.today()
+        month_to_process = st.selectbox("Month", [datetime(2000, m, 1).strftime('%B') for m in range(1, 13)], index=today.month-1)
+        year_to_process = st.number_input("Year", value=today.year, min_value=2024, max_value=2030)
+
+        with st.expander("Add New Expenditure Entry", expanded=True):
+            with st.form("spend_form", clear_on_submit=True):
+                col1, col2 = st.columns(2)
+                exp_date = col1.date_input("Expenditure Date")
+                exp_head = col1.selectbox("Budget Head", BUDGET_HEADS)
+                exp_amt = col2.number_input("Amount Spent (₹)", min_value=0.0)
+                exp_detail = col2.text_area("Expenditure Details/Voucher Info")
+                
+                if st.form_submit_button("Add Entry"):
+                    new_exp = {
+                        "date": exp_date.strftime("%Y-%m-%d"),
+                        "head": exp_head,
+                        "detail": exp_detail,
+                        "amount": exp_amt
+                    }
+                    data['expenditure'].append(new_exp)
+                    save_data(data, selected_fy)
+                    st.toast("Expenditure Added and Backed up.")
+
+        # Re-initialize df_exp here so both this tab and the chatbot can see it
+        df_exp = pd.DataFrame(data.get('expenditure', []))
+        
+        if not df_exp.empty:
+            df_exp['date'] = pd.to_datetime(df_exp['date'])
+            current_month_exp = df_exp[
+                (df_exp['date'].dt.strftime('%B') == month_to_process) & 
+                (df_exp['date'].dt.year == year_to_process)
+            ]
+            st.subheader(f"Spend in {month_to_process} {year_to_process}")
+            st.dataframe(current_month_exp, use_container_width=True)
+
+    # --- TAB 6: SOE GENERATION ---
+    with tabs[5]:
+        st.header("Statement of Expenditure (SOE) Generation")
         
         st.markdown("<h3 style='text-align: center;'>Statement of Expenditure for the month of December 2025</h3>", unsafe_allow_html=True)
         st.markdown("**Name of the Centre:** Navsari")
@@ -1114,8 +1153,9 @@ def main():
                     file_name="SOE_December_2025.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
-    # --- TAB 6: AI CHATBOT ---
-    with tabs[5]:
+
+    # --- TAB 7: AI CHATBOT ---
+    with tabs[6]:
         st.header("Grant Smart-Assistant")
         st.write("Ask questions like: *'How much is remaining in ORC Recurring?'* or *'Generate a summary of spend for Quarter 3'*.")
 
