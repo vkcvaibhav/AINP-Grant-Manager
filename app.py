@@ -345,28 +345,9 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
 # ---------------------------------------------------------
 # 👇 PASTE THIS NEW FUNCTION RIGHT HERE (Around Line 240) 👇
 # ---------------------------------------------------------
-def create_word_doc():
+def create_word_doc(dataframe):
     doc = Document()
     
-    # Using the exact numbers and wording provided
-    columns = [
-        "Sr. No.", "Head", "Opening Balance as on 01.04.2025", 
-        "Funds Received from the Council during 2025-26", 
-        "Expenditure up to the month of December 2025", 
-        "Cumulative Expenditure up to 31.12.2025", 
-        "Total", "ICAR Share", "State Share"
-    ]
-    
-    data = [
-        ["1", "Recurring Contingencies\nEstablishment Charges", "(-) 1,38,340.60", "18,00,000.00", "24,74,691.00", "18,56,018.25", "6,18,672.75", "24,74,691.00", "1,32,773.00"],
-        ["2", "Contingencies", "", "", "1,32,773.00", "1,32,773.00", "", "", ""],
-        ["3", "TSP", "", "", "7,699.00", "", "", "", ""],
-        ["", "Total - A", "", "18,00,000.00", "", "", "", "", ""],
-        ["", "Non Recurring Contingencies\nEquipments\nWorks", "", "", "", "", "", "", ""],
-        ["", "Total - B", "", "", "", "", "", "", ""],
-        ["", "Grand Total A+B", "", "18,00,000.00", "26,07,464.00", "19,88,791.25", "6,18,672.75", "26,07,464.00", ""]
-    ]
-
     # Set narrow margins for a wide table
     sections = doc.sections
     for section in sections:
@@ -382,6 +363,8 @@ def create_word_doc():
     doc.add_paragraph("Name of the Centre: Navsari").runs[0].bold = True
     doc.add_paragraph("Name of the Scheme: AICRP/AINP on Agricultural Acarology, NAU, Navsari").runs[0].bold = True
     
+    columns = dataframe.columns.tolist()
+    
     # Table creation
     table = doc.add_table(rows=1, cols=len(columns))
     table.style = 'Table Grid'
@@ -393,18 +376,24 @@ def create_word_doc():
         hdr_cells[i].paragraphs[0].runs[0].bold = True
         hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         
-    # Add data rows
-    for row_data in data:
+    # Add data rows from the edited dataframe
+    for index, row in dataframe.iterrows():
         row_cells = table.add_row().cells
-        for i, cell_data in enumerate(row_data):
-            row_cells[i].text = str(cell_data)
+        for i, cell_data in enumerate(row):
+            # Convert to string and handle NaN values
+            text_val = str(cell_data) if pd.notna(cell_data) else ""
+            row_cells[i].text = text_val
             row_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            # Make main headers and totals bold for readability in Word
+            if text_val in ["Recurring Contingencies", "Non Recurring Contingencies", "Total - A", "Total - B", "Grand Total (A+B)"]:
+                row_cells[i].paragraphs[0].runs[0].bold = True
             
     # Add footer note
     footer = doc.add_paragraph("\nIn 2025-26 State share released only in Pay and allowances")
     footer.runs[0].italic = True
     
-    # Save to io.BytesIO object (Changed from BytesIO to io.BytesIO)
+    # Save to io.BytesIO object
     bio = io.BytesIO()
     doc.save(bio)
     bio.seek(0)
@@ -1035,43 +1024,48 @@ def main():
         st.markdown("**Name of the Centre:** Navsari")
         st.markdown("**Name of the Scheme:** AICRP/AINP on Agricultural Acarology, NAU, Navsari")
 
-        # Your hardcoded data
+        # The new 8-column layout with split ICAR/State share at the end
         columns = [
-            "Sr. No.", "Head", "Opening Balance as on 01.04.2025", 
-            "Funds Received from the Council during 2025-26", 
-            "Expenditure up to the month of December 2025", 
-            "Cumulative Expenditure up to 31.12.2025", 
-            "Total", "ICAR Share", "State Share"
+            "Sr. No.", 
+            "Head", 
+            "Opening Balance as on 01.04.2025", 
+            "Funds Received from Council (2025-26)", 
+            "Expenditure up to Dec 2025", 
+            "Cumulative Exp. up to 31.12.2025", 
+            "75% ICAR Share", 
+            "25% State Share"
         ]
+        
+        # New Hierarchical Data Layout
         data_table = [
-            ["1", "Recurring Contingencies\nEstablishment Charges", "(-) 1,38,340.60", "18,00,000.00", "24,74,691.00", "18,56,018.25", "6,18,672.75", "24,74,691.00", "1,32,773.00"],
-            ["2", "Contingencies", "", "", "1,32,773.00", "1,32,773.00", "", "", ""],
-            ["3", "TSP", "", "", "7,699.00", "", "", "", ""],
-            ["", "Total - A", "", "18,00,000.00", "", "", "", "", ""],
-            ["", "Non Recurring Contingencies\nEquipments\nWorks", "", "", "", "", "", "", ""],
-            ["", "Total - B", "", "", "", "", "", "", ""],
-            ["", "Grand Total A+B", "", "18,00,000.00", "26,07,464.00", "19,88,791.25", "6,18,672.75", "26,07,464.00", ""]
+            ["", "Recurring Contingencies", "", "", "", "", "", ""],
+            ["1", "Establishment Charges", "(-) 1,38,340.60", "18,00,000.00", "24,74,691.00", "18,56,018.25", "18,56,018.25", "1,32,773.00"],
+            ["2", "TA", "", "", "", "", "", ""],
+            ["3", "Contingencies", "", "", "1,32,773.00", "1,32,773.00", "1,32,773.00", ""],
+            ["4", "TSP", "", "", "7,699.00", "7,699.00", "7,699.00", ""],
+            ["", "Total - A", "", "18,00,000.00", "", "", "", ""],
+            ["", "Non Recurring Contingencies", "", "", "", "", "", ""],
+            ["1", "Equipments", "", "", "", "", "", ""],
+            ["2", "Works", "", "", "", "", "", ""],
+            ["", "Total - B", "", "", "", "", "", ""],
+            ["", "Grand Total (A+B)", "", "18,00,000.00", "26,07,464.00", "19,88,791.25", "19,88,791.25", ""]
         ]
 
         df_soe = pd.DataFrame(data_table, columns=columns)
 
-        # CSS to inject for exact table borders
-        st.markdown("""
-        <style>
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid black !important; padding: 8px; text-align: center; }
-        th { background-color: #f2f2f2; }
-        </style>
-        """, unsafe_allow_html=True)
-
-        st.table(df_soe)
+        st.markdown("💡 **Tip: Click any cell below to edit the numbers before downloading.**")
+        
+        # Display the editable table and capture the user's edits
+        edited_df = st.data_editor(df_soe, use_container_width=True, hide_index=True)
+        
         st.markdown("*In 2025-26 State share released only in Pay and allowances*")
 
         st.divider()
         if st.button("Generate SOE Word Document", key="soe_btn_new"):
             with st.spinner("Creating Word file..."):
-                soe_doc_buffer = create_word_doc()
-                st.success("SOE Generated!")
+                # Pass the edited table data into the Word creator
+                soe_doc_buffer = create_word_doc(edited_df)
+                st.success("SOE Generated with your updated values!")
                 st.download_button(
                     label="📥 Download SOE Word File",
                     data=soe_doc_buffer,
