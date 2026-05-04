@@ -1847,8 +1847,130 @@ def main():
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
 
-    # --- TAB 7: AI CHATBOT ---
+# =====================================================================
+        # 👇 NEW SECTION: TAB 6 - AUC GENERATION 👇
+        # =====================================================================
     with tabs[6]:
+        st.header("Audit Utilization Certificate (AUC) & Forwarding Letter")
+        st.write("Generate the final year-end AUC and its corresponding Gujarati forwarding letter.")
+        
+        # Calculate Base Variables for the FY
+        fy_start_year = int(selected_fy.split('-')[0])
+        fy_end_year = int("20" + selected_fy.split('-')[1])
+        fy_start_date = datetime(fy_start_year, 4, 1)
+        fy_end_date = datetime(fy_end_year, 3, 31)
+        
+        # 1. Gather Installment Data
+        inst_data = []
+        tot_remittance = 0.0
+        for idx, inst in enumerate(data.get('installments', [])):
+            inst_date = datetime.strptime(inst['date'], "%Y-%m-%d")
+            if fy_start_date <= inst_date <= fy_end_date:
+                amt = float(inst.get('amount', 0.0))
+                inst_data.append([idx+1, f"DSC Transaction payment advice report Dated: {inst.get('date')}", f"{amt:,.2f}"])
+                tot_remittance += amt
+        inst_data.append(["", "Total :-", f"{tot_remittance:,.2f}"])
+        
+        # 2. Gather Expenditure Data
+        def format_inr_auc(number):
+            if number == 0: return "-"
+            is_neg = number < 0
+            num_abs = abs(number)
+            s, *d = str(f"{num_abs:.2f}").partition(".")
+            r = ",".join([s[x-2:x] for x in range(-3, -len(s), -2)][::-1] + [s[-3:]]) if len(s) > 3 else s
+            return f"(-) {r}{d[0]}{d[1]}" if is_neg else f"{r}{d[0]}{d[1]}"
+
+        # Calculate Total ICAR Expense
+        ob = data.get('opening_balances', {})
+        total_opening_bal_icar = sum(float(v) for v in ob.values())
+        
+        exp_y = { "Establishment Charges": 0.0, "TA": 0.0, "Contingencies": 0.0, "TSP": 0.0, "Equipments": 0.0, "Works": 0.0 }
+        
+        def get_smart_soe_head(raw_string):
+            rs = str(raw_string).upper()
+            if "PAY" in rs or "ESTABLISHMENT" in rs: return "Establishment Charges"
+            if "TA" in rs or "TRAVELLING" in rs: return "TA"
+            if "TSP" in rs: return "TSP"
+            if "NON" in rs or "EQUIP" in rs or "WORK" in rs: return "Equipments" 
+            if "ORC" in rs or "CONTINGENC" in rs or "RECURRING" in rs: return "Contingencies"
+            return None
+            
+        for e in data.get('expenditure', []):
+            e_date = datetime.strptime(e['date'], "%Y-%m-%d")
+            if fy_start_date <= e_date <= fy_end_date:
+                combined_head = f"{e.get('head', '')} {e.get('sub_head', '')}"
+                soe_head = get_smart_soe_head(combined_head)
+                if soe_head in exp_y: exp_y[soe_head] += float(e.get('amount', 0.0))
+
+        # Calculate total ICAR share of expenses
+        tot_icar_exp = 0.0
+        for head, amt in exp_y.items():
+            if head == "TSP": tot_icar_exp += amt * 1.0
+            else: tot_icar_exp += amt * 0.75
+            
+        closing_balance = (total_opening_bal_icar + tot_remittance) - tot_icar_exp
+        
+        t1_data = [
+            format_inr_auc(total_opening_bal_icar),
+            format_inr_auc(tot_remittance),
+            "0.00",
+            format_inr_auc(tot_icar_exp),
+            format_inr_auc(closing_balance)
+        ]
+        
+        # Build Table 2
+        alloc = data.get('allocation', {})
+        def get_alloc(head_kw):
+            for k,v in alloc.items():
+                if head_kw in k.upper(): return v.get('total', 0.0)
+            return 0.0
+            
+        t2_data = [
+            ["Recurring", "", "", "", ""],
+            ["Pay and Allowance", format_inr_auc(get_alloc("PAY")), format_inr_auc(exp_y["Establishment Charges"]*0.75), format_inr_auc(exp_y["Establishment Charges"]*0.25), format_inr_auc(exp_y["Establishment Charges"])],
+            ["Travelling Allowance", format_inr_auc(get_alloc("TA")), format_inr_auc(exp_y["TA"]*0.75), format_inr_auc(exp_y["TA"]*0.25), format_inr_auc(exp_y["TA"])],
+            ["Recurring Contingencies", format_inr_auc(get_alloc("ORC")), format_inr_auc(exp_y["Contingencies"]*0.75), format_inr_auc(exp_y["Contingencies"]*0.25), format_inr_auc(exp_y["Contingencies"])],
+            ["HRD", "-", "-", "-", "-"],
+            ["Non Recurring Contingencies", "", "", "", ""],
+            ["Equipment", format_inr_auc(get_alloc("EQUIP")), format_inr_auc(exp_y["Equipments"]*0.75), format_inr_auc(exp_y["Equipments"]*0.25), format_inr_auc(exp_y["Equipments"])],
+            ["Works", "-", "-", "-", "-"],
+            ["Vehicle (IT)", "-", "-", "-", "-"],
+        ]
+        
+        tot_alloc = sum(get_alloc(k) for k in ["PAY", "TA", "ORC", "EQUIP"])
+        tot_state_exp = sum(exp_y[k]*0.25 for k in exp_y if k != "TSP")
+        tot_all_exp = sum(exp_y.values())
+        t2_data.append(["Total:-", format_inr_auc(tot_alloc), format_inr_auc(tot_icar_exp), format_inr_auc(tot_state_exp), format_inr_auc(tot_all_exp)])
+        
+        text_vars = {
+            "tot_remittance": format_inr_auc(tot_remittance),
+            "opening_bal": format_inr_auc(total_opening_bal_icar),
+            "tot_icar_exp": format_inr_auc(tot_icar_exp)
+        }
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.subheader("1. Audit Utilization Certificate (AUC)")
+            st.write("Calculations are generated automatically based on FY entries.")
+            if st.button("📥 Generate & Download AUC Document"):
+                with st.spinner("Generating AUC..."):
+                    auc_doc = generate_auc_certificate(inst_data, t1_data, t2_data, text_vars, selected_fy)
+                    st.download_button("Download AUC (.docx)", data=auc_doc, file_name=f"AUC_FY_{selected_fy}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                    
+        with col_b:
+            st.subheader("2. AUC Forwarding Letter")
+            ref_no = st.text_input("Reference No. (જા.નં. એસીએન/એન્ટો/___/૨૦૨૬):", value="AUC")
+            letter_date = st.text_input("Date (તારીખ):", value=datetime.now().strftime("%d/%m/%Y"))
+            subj = st.text_area("Subject (વિષય):", value=f"AINP on Agricultural Acarology (BH.303/2092) નું વર્ષ {selected_fy} નુ Audit Utilization Certificate (AUC) મોકલવા બાબત.")
+            body = st.text_area("Body Text:", value="જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે ચાલતી આઈ.સી.એ.આર. યોજના AINP on Agricultural Acarology (BH.303/2092) નું વર્ષ 2025-26 નુ Audit Utilization Certificate (AUC) આ સાથે સામેલ રાખી મોકલી આપીએ છીએ.")
+            
+            if st.button("📥 Generate & Download Forwarding Letter"):
+                with st.spinner("Generating Letter..."):
+                    fw_doc = generate_auc_forwarding_docx(ref_no, letter_date, subj, body)
+                    st.download_button("Download Forwarding Letter (.docx)", data=fw_doc, file_name=f"AUC_Forwarding_Letter_{selected_fy}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+    # --- TAB 7: AI CHATBOT ---
+    with tabs[7]:  # <--- MAKE SURE THIS IS CHANGED TO 7
         st.header("Grant Smart-Assistant")
         st.write("Ask questions like: *'How much is remaining in ORC Recurring?'* or *'Generate a summary of spend for Quarter 3'*.")
 
