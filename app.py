@@ -213,6 +213,9 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
         
     # Draw Thick Black Separator Line
     p_thick = doc.add_paragraph()
+    p_thin.paragraph_format.space_before = Pt(0)
+    p_thin.paragraph_format.space_after = Pt(0)
+    p_thin.add_run().font.size = Pt(1)
     add_bottom_border(p_thick, size='24')
     
     # 2. Sender Info Block
@@ -236,7 +239,10 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
     
     # Draw Thin Black Separator Line
     p_thin = doc.add_paragraph()
-    add_bottom_border(p_thin, size='8') 
+    p_thin.paragraph_format.space_before = Pt(0)
+    p_thin.paragraph_format.space_after = Pt(0)
+    p_thin.add_run().font.size = Pt(1)
+    add_bottom_border(p_thin, size='24') 
     
     # 3. Reference No & Date
     table3 = doc.add_table(rows=1, cols=2)
