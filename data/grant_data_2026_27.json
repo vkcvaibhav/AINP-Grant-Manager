@@ -101,6 +101,12 @@
             "head": "Non-Recurring Contingencies (Equipments/Works)",
             "detail": "",
             "amount": 300000.0
+        },
+        {
+            "date": "2026-05-04",
+            "head": "TSP",
+            "detail": "",
+            "amount": 20000.0
         }
     ],
     "latest_quarter": "Q4 Release",
