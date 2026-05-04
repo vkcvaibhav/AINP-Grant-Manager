@@ -239,6 +239,7 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
         for p in cell.paragraphs:
             p.paragraph_format.space_after = Pt(0)
             p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.line_spacing = 0.8  # <--- This line squashes the \n gap
     
     # Draw Second Thick Black Separator Line (Squashed height to remove gap)
     p_thick2 = doc.add_paragraph()
