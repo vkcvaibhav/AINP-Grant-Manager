@@ -8,6 +8,7 @@ from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_ALIGN_VERTICAL
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
 from fpdf import FPDF
@@ -211,12 +212,14 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
         r_right = p_right.add_run()
         r_right.add_picture(ICAR_LOGO, width=Inches(1.5))
         
-    # Draw Thick Black Separator Line
-    p_thick = doc.add_paragraph()
-    p_thick.paragraph_format.space_before = Pt(0)
-    p_thick.paragraph_format.space_after = Pt(0)
-    p_thick.add_run().font.size = Pt(1) 
-    add_bottom_border(p_thick, size='24')
+    # Draw First Thick Black Separator Line (Squashed height to remove gap)
+    p_thick1 = doc.add_paragraph()
+    p_thick1.paragraph_format.space_before = Pt(0)
+    p_thick1.paragraph_format.space_after = Pt(0)
+    p_thick1.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+    p_thick1.paragraph_format.line_spacing = Pt(1)
+    p_thick1.add_run().font.size = Pt(1) 
+    add_bottom_border(p_thick1, size='24')
     
     # 2. Sender Info Block
     table2 = doc.add_table(rows=1, cols=2)
@@ -237,12 +240,14 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
             p.paragraph_format.space_after = Pt(0)
             p.paragraph_format.space_before = Pt(0)
     
-    # Draw Thick Black Separator Line
-    p_thick = doc.add_paragraph()
-    p_thick.paragraph_format.space_before = Pt(0)
-    p_thick.paragraph_format.space_after = Pt(0)
-    p_thick.add_run().font.size = Pt(1) 
-    add_bottom_border(p_thick, size='24')
+    # Draw Second Thick Black Separator Line (Squashed height to remove gap)
+    p_thick2 = doc.add_paragraph()
+    p_thick2.paragraph_format.space_before = Pt(0)
+    p_thick2.paragraph_format.space_after = Pt(0)
+    p_thick2.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+    p_thick2.paragraph_format.line_spacing = Pt(1)
+    p_thick2.add_run().font.size = Pt(1) 
+    add_bottom_border(p_thick2, size='24')
     
     # 3. Reference No & Date
     table3 = doc.add_table(rows=1, cols=2)
