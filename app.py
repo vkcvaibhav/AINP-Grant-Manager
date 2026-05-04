@@ -142,7 +142,7 @@ def process_upload_with_ai(uploaded_file, prompt_task):
 class GujaratiPDF(FPDF):
     def header(self):
         if ICAR_LOGO:
-            self.image(ICAR_LOGO, 10, 8, 20)
+            self.image(ICAR_LOGO, 180, 8, 20)
         if NAU_LOGO:
             self.image(NAU_LOGO, 180, 8, 20)
         
