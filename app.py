@@ -1190,12 +1190,10 @@ def main():
         with st.expander(f"⚙️ Set Opening Balances for FY {selected_fy}"):
             st.write(f"Save the opening balances carried forward as on 01.04.{fy_start_year}.")
             
-            # ---> FIX 1: Unique Form Key for the Financial Year <---
             with st.form(f"ob_form_{selected_fy}"):
                 cols = st.columns(3)
                 new_obs = {}
                 for idx, (k, v) in enumerate(data['opening_balances'].items()):
-                    # ---> FIX 2: Added a unique 'key' so Streamlit resets the box when the year changes <---
                     new_obs[k] = cols[idx % 3].number_input(
                         f"{k} (₹)", 
                         value=float(v), 
@@ -1206,33 +1204,36 @@ def main():
                     data['opening_balances'] = new_obs
                     save_data(data, selected_fy)
                     st.success(f"Opening Balances Saved for {selected_fy}!")
-                    st.rerun() # ---> FIX 3: Instantly refresh the page to apply the balances to the table below <---
+                    st.rerun() 
 
         st.divider()
         st.markdown(f"<h3 style='text-align: center;'>Statement of Expenditure for the month of {soe_month} {soe_year}</h3>", unsafe_allow_html=True)
         st.markdown("**Name of the Centre:** Navsari")
         st.markdown("**Name of the Scheme:** AICRP/AINP on Agricultural Acarology, NAU, Navsari")
 
-        # 4. Data Gathering & Mapping Logic
-        # Mapping standard Budget Heads to SOE Sub-Heads
-        budget_to_soe_map = {
-            "Pay and Allowances": "Establishment Charges",
-            "Travelling Allowances (TA)": "TA",
-            "Other Recurring Contingencies (ORC)": "Contingencies",
-            "TSP": "TSP",
-            "Non-Recurring Contingencies (Equipments/Works)": "Equipments"
-        }
-
+        # 4. Data Gathering & SMART Mapping Logic
         ob = data['opening_balances']
         funds = {k: 0.0 for k in ob.keys()}
         exp = {k: 0.0 for k in ob.keys()}
+        
+        # Smart Keyword Matcher: Converts any saved name into the strict SOE categories
+        def get_smart_soe_head(raw_string):
+            if not raw_string: return None
+            rs = str(raw_string).upper()
+            if "PAY" in rs or "ESTABLISHMENT" in rs: return "Establishment Charges"
+            if "TA" in rs or "TRAVELLING" in rs: return "TA"
+            if "TSP" in rs: return "TSP"
+            # "NON" covers "Non-Recurring", must check this before general "Contingencies"
+            if "NON" in rs or "EQUIP" in rs or "WORK" in rs: return "Equipments" 
+            if "ORC" in rs or "CONTINGENC" in rs or "RECURRING" in rs: return "Contingencies"
+            return None
 
         # Cumulative Funds Received (From April 1 up to end of selected month)
         for inst in data.get('installments', []):
             inst_date = datetime.strptime(inst['date'], "%Y-%m-%d")
             if fy_start_date <= inst_date <= end_date:
                 for h_name, amt in inst.get('heads', {}).items():
-                    soe_head = budget_to_soe_map.get(h_name)
+                    soe_head = get_smart_soe_head(h_name)
                     if soe_head in funds:
                         funds[soe_head] += float(amt)
 
@@ -1240,13 +1241,9 @@ def main():
         for e in data.get('expenditure', []):
             e_date = datetime.strptime(e['date'], "%Y-%m-%d")
             if fy_start_date <= e_date <= end_date:
-                # Grab the saved head and convert it using the map
-                saved_head = e.get('head') 
-                soe_head = budget_to_soe_map.get(saved_head)
-                
-                # Fallback if they used the cascading dropdown previously
-                if not soe_head:
-                    soe_head = e.get('sub_head')
+                # Combine head and sub_head just in case, ensuring we catch the keyword
+                combined_head = f"{e.get('head', '')} {e.get('sub_head', '')}"
+                soe_head = get_smart_soe_head(combined_head)
                     
                 if soe_head in exp:
                     exp[soe_head] += float(e.get('amount', 0.0))
