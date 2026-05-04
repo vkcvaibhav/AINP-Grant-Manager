@@ -179,7 +179,7 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
     
     # Left Logo (NAU)
     if 'NAU_LOGO' in globals() and NAU_LOGO and os.path.exists(NAU_LOGO):
-        p_left = table.cell(0, 0).paragraphs[1]
+        p_left = table.cell(0, 0).paragraphs[0]
         p_left.alignment = WD_ALIGN_PARAGRAPH.CENTER
         r_left = p_left.add_run()
         r_left.add_picture(NAU_LOGO, width=Inches(1.8))
@@ -187,7 +187,7 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
     # Center Text
     p_center = table.cell(0, 1).paragraphs[0]
     p_center.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_center.paragraph_format.line_spacing = 0.9 # Tight gap below the main heading
+    p_center.paragraph_format.line_spacing = Pt(2) # Tight gap below the main heading
     
     r1 = p_center.add_run("કીટકશાસ્ત્ર વિભાગ\n")
     r1.bold = True
