@@ -525,6 +525,108 @@ def create_yearly_word_doc(dataframe, fy_string):
     doc.save(bio)
     bio.seek(0)
     return bio
+    # ---------------------------------------------------------
+# 👇 PASTE THIS NEW FUNCTION RIGHT BELOW `create_word_doc` 👇
+# ---------------------------------------------------------
+def create_annual_word_doc(dataframe, fy_string):
+    doc = Document()
+    
+    # Set narrow margins and change orientation to LANDSCAPE
+    sections = doc.sections
+    for section in sections:
+        section.orientation = WD_ORIENTATION.LANDSCAPE
+        section.page_width, section.page_height = section.page_height, section.page_width
+        
+        section.left_margin = Inches(0.5)
+        section.right_margin = Inches(0.5)
+        section.top_margin = Inches(0.5)
+        section.bottom_margin = Inches(0.5)
+    
+    fy_start = fy_string.split('-')[0]
+    fy_end = "20" + fy_string.split('-')[1]
+    
+    # Headers - Dynamic for the Full Year
+    title = doc.add_paragraph()
+    run_title = title.add_run(f"Statement of Expenditure for the Financial Year {fy_string}")
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_title.bold = True
+    run_title.font.size = Pt(12)
+    
+    doc.add_paragraph("Name of the Centre: Navsari").runs[0].bold = True
+    doc.add_paragraph("Name of the Scheme: AICRP/AINP on Agricultural Acarology, NAU, Navsari").runs[0].bold = True
+    
+    # Create Table with 2 header rows
+    table = doc.add_table(rows=2, cols=8)
+    table.style = 'Table Grid'
+    
+    # --- ROW 0: Top Level Headers ---
+    hdr0 = table.rows[0].cells
+    hdr0[0].text = "Sr.\nNo."
+    hdr0[1].text = "Head"
+    hdr0[2].text = f"Opening Balance\nas on 01.04.{fy_start}"
+    hdr0[3].text = f"Funds Received\nfrom the Council\nduring {fy_string}"
+    hdr0[4].text = f"Expenditure during\nthe FY {fy_string}"
+    hdr0[5].text = f"Cumulative Expenditure\nup to 31.03.{fy_end}"
+    hdr0[7].text = "Total"
+    
+    # Merge "Cumulative Expenditure" across the two share columns
+    hdr0[5].merge(hdr0[6])
+    
+    # --- ROW 1: Sub Headers ---
+    hdr1 = table.rows[1].cells
+    hdr1[5].text = "75%\nICAR Share"
+    hdr1[6].text = "25%\nState Share"
+    
+    # Merge vertical columns for headers that span both rows
+    for c in [0, 1, 2, 3, 4, 7]:
+        table.cell(0, c).merge(table.cell(1, c))
+    
+    # Format all header cells
+    for row_idx in [0, 1]:
+        for cell in table.rows[row_idx].cells:
+            for paragraph in cell.paragraphs:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for run in paragraph.runs:
+                    run.bold = True
+            cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+
+    # --- Add Data Rows ---
+    for index, row in dataframe.iterrows():
+        row_cells = table.add_row().cells
+        is_yellow_header = row.iloc[1] in ["A. Recurring Contingencies", "B. Non Recurring Contingencies"]
+        
+        for i, cell_data in enumerate(row):
+            text_val = str(cell_data) if pd.notna(cell_data) else ""
+            row_cells[i].text = text_val
+            
+            if i == 1:
+                row_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+            else:
+                row_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                
+            row_cells[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            
+            if is_yellow_header or text_val in ["Total - A", "Total - B", "Grand Total A+B"]:
+                row_cells[i].paragraphs[0].runs[0].bold = True
+                
+        # Apply yellow background shading
+        if is_yellow_header:
+            for cell in row_cells:
+                tcPr = cell._tc.get_or_add_tcPr()
+                shd = OxmlElement('w:shd')
+                shd.set(qn('w:val'), 'clear')
+                shd.set(qn('w:color'), 'auto')
+                shd.set(qn('w:fill'), 'FFFF00')
+                tcPr.append(shd)
+            
+    # Add footer note
+    doc.add_paragraph() 
+    footer = doc.add_paragraph("In 2025-26 State share released only in Pay and allowances", style='List Bullet')
+    
+    bio = io.BytesIO()
+    doc.save(bio)
+    bio.seek(0)
+    return bio
 
 # --- 3. THE UI APPLICATION ---
 
@@ -1478,6 +1580,73 @@ def main():
                     label="📥 Download Yearly Summary Word File",
                     data=yearly_doc_buffer,
                     file_name=f"12_Month_Summary_FY_{selected_fy}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+                # =====================================================================
+        # 🔵 SECTION 2: ANNUAL SOE (FULL FY)
+        # =====================================================================
+        st.divider()
+        st.markdown(f"<h3 style='text-align: center;'>Annual Statement of Expenditure for FY {selected_fy}</h3>", unsafe_allow_html=True)
+        st.info(f"Calculated from 01.04.{fy_start_year} up to 31.03.{fy_end_year}")
+
+        funds_y = {k: 0.0 for k in ob.keys()}
+        exp_y = {k: 0.0 for k in ob.keys()}
+
+        # Annual Cumulative Funds
+        for inst in data.get('installments', []):
+            inst_date = datetime.strptime(inst['date'], "%Y-%m-%d")
+            if fy_start_date <= inst_date <= fy_end_date:
+                for h_name, amt in inst.get('heads', {}).items():
+                    soe_head = get_smart_soe_head(h_name)
+                    if soe_head in funds_y: funds_y[soe_head] += float(amt)
+
+        # Annual Cumulative Exp
+        for e in data.get('expenditure', []):
+            e_date = datetime.strptime(e['date'], "%Y-%m-%d")
+            if fy_start_date <= e_date <= fy_end_date:
+                combined_head = f"{e.get('head', '')} {e.get('sub_head', '')}"
+                soe_head = get_smart_soe_head(combined_head)
+                if soe_head in exp_y: exp_y[soe_head] += float(e.get('amount', 0.0))
+
+        # Build Annual Table Array
+        data_table_y = [["", "A. Recurring Contingencies", "", "", "", "", "", ""]]
+        tot_A_y = [0.0]*5
+        for sr, head in rec_heads:
+            o = ob[head]; f = funds_y[head]; e = exp_y[head]
+            i = e * 1.0 if head == "TSP" else e * 0.75; s = 0.0 if head == "TSP" else e * 0.25
+            data_table_y.append([sr, head, format_inr(o), format_inr(f), format_inr(e), format_inr(i), format_inr(s), format_inr(e)])
+            tot_A_y[0] += o; tot_A_y[1] += f; tot_A_y[2] += e; tot_A_y[3] += i; tot_A_y[4] += s
+
+        data_table_y.append(["", "Total - A", format_inr(tot_A_y[0]), format_inr(tot_A_y[1]), format_inr(tot_A_y[2]), format_inr(tot_A_y[3]), format_inr(tot_A_y[4]), format_inr(tot_A_y[2])])
+        data_table_y.append(["", "B. Non Recurring Contingencies", "", "", "", "", "", ""])
+
+        tot_B_y = [0.0]*5
+        for sr, head in non_rec_heads:
+            o = ob[head]; f = funds_y[head]; e = exp_y[head]
+            i = e * 0.75; s = e * 0.25
+            data_table_y.append([sr, head, format_inr(o), format_inr(f), format_inr(e), format_inr(i), format_inr(s), format_inr(e)])
+            tot_B_y[0] += o; tot_B_y[1] += f; tot_B_y[2] += e; tot_B_y[3] += i; tot_B_y[4] += s
+
+        data_table_y.append(["", "Total - B", format_inr(tot_B_y[0]), format_inr(tot_B_y[1]), format_inr(tot_B_y[2]), format_inr(tot_B_y[3]), format_inr(tot_B_y[4]), format_inr(tot_B_y[2])])
+        g_tot_y = [tot_A_y[j] + tot_B_y[j] for j in range(5)]
+        data_table_y.append(["", "Grand Total A+B", format_inr(g_tot_y[0]), format_inr(g_tot_y[1]), format_inr(g_tot_y[2]), format_inr(g_tot_y[3]), format_inr(g_tot_y[4]), format_inr(g_tot_y[2])])
+
+        columns_y = [
+            "Sr. No.", "Head", f"Opening Balance as on 01.04.{fy_start_year}", f"Funds Received during FY {selected_fy}", 
+            f"Expenditure during FY {selected_fy}", "75% ICAR Share", "25% State Share", "Total"
+        ]
+        
+        df_soe_y = pd.DataFrame(data_table_y, columns=columns_y)
+        edited_df_y = st.data_editor(df_soe_y, use_container_width=True, hide_index=True, key="annual_edit")
+
+        if st.button("Generate Annual SOE Word Document", key="soe_btn_y"):
+            with st.spinner("Creating Annual Word file..."):
+                annual_doc_buffer = create_annual_word_doc(edited_df_y, selected_fy)
+                st.success("Annual SOE Generated!")
+                st.download_button(
+                    label="📥 Download Annual SOE Word File",
+                    data=annual_doc_buffer,
+                    file_name=f"Annual_SOE_FY_{selected_fy}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
 
