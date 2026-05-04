@@ -12,6 +12,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
 from fpdf import FPDF
+from io import BytesIO
 import io
 from github import Github  # <-- Added for GitHub backups
 
@@ -27,7 +28,7 @@ for d in DIRS:
 # AI Setup
 api_key = st.secrets.get("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
-model_pro = genai.GenerativeModel('gemini-3.1-pro-preview')   
+model_pro = genai.GenerativeModel('gemini-1.5-pro-latest')   
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
@@ -338,49 +339,6 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
     p_sig_right.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p_sig_right.add_run("પ્રાધ્યાપક અને વડા").bold = True
     
-    doc_io = io.BytesIO()
-    doc.save(doc_io)
-    doc_io.seek(0)
-    return doc_io
-# ---------------------------------------------------------
-# 👇 PASTE THE NEW FUNCTION RIGHT HERE 👇
-# ---------------------------------------------------------
-def generate_soe_word(data, month, year):
-    """Generates the Statement of Expenditure (SOE) as a Word document."""
-    doc = Document()
-    doc.add_heading(f'Statement of Expenditure - {month} {year}', 0)
-
-    # Filter expenditures for the specific month/year
-    exp_list = data.get('expenditure', [])
-    filtered_exp = [
-        e for e in exp_list 
-        if datetime.strptime(e['date'], "%Y-%m-%d").strftime('%B') == month 
-        and datetime.strptime(e['date'], "%Y-%m-%d").year == year
-    ]
-
-    # Add a table
-    table = doc.add_table(rows=1, cols=4)
-    table.style = 'Table Grid'
-    
-    # Define headers
-    hdr_cells = table.rows[0].cells
-    hdr_cells[0].text = 'Date'
-    hdr_cells[1].text = 'Budget Head'
-    hdr_cells[2].text = 'Description'
-    hdr_cells[3].text = 'Amount (₹)'
-
-    total_month_spend = 0
-    for item in filtered_exp:
-        row_cells = table.add_row().cells
-        row_cells[0].text = item['date']
-        row_cells[1].text = item['head']
-        row_cells[2].text = item['detail']
-        row_cells[3].text = f"{item['amount']:,.2f}"
-        total_month_spend += item['amount']
-
-    doc.add_paragraph(f"\nTotal Expenditure for the Month: ₹{total_month_spend:,.2f}")
-    
-    # Save to buffer
     doc_io = io.BytesIO()
     doc.save(doc_io)
     doc_io.seek(0)
