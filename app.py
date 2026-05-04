@@ -12,7 +12,6 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
 from fpdf import FPDF
-from io import BytesIO
 import io
 from github import Github  # <-- Added for GitHub backups
 
@@ -344,6 +343,76 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
     doc_io.seek(0)
     return doc_io
 
+def generate_soe_word():
+    """Generates the Native Microsoft Word format for the SOE Table."""
+    doc = Document()
+    
+    # Set narrow margins for a wide table
+    sections = doc.sections
+    for section in sections:
+        section.left_margin = Inches(0.5)
+        section.right_margin = Inches(0.5)
+    
+    # Headers
+    title = doc.add_paragraph("Statement of Expenditure for the month of December 2025")
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    title.runs[0].bold = True
+    title.runs[0].font.size = Pt(14)
+    
+    doc.add_paragraph("Name of the Centre: Navsari").runs[0].bold = True
+    doc.add_paragraph("Name of the Scheme: AICRP/AINP on Agricultural Acarology, NAU, Navsari").runs[0].bold = True
+    
+    columns = [
+        "Sr. No.", 
+        "Head", 
+        "Opening Balance as on 01.04.2025", 
+        "Funds Received from the Council during 2025-26", 
+        "Expenditure up to the month of December 2025", 
+        "Cumulative Expenditure up to 31.12.2025", 
+        "Total", 
+        "ICAR Share", 
+        "State Share"
+    ]
+    
+    data_rows = [
+        ["1", "Recurring Contingencies\nEstablishment Charges", "(-) 1,38,340.60", "18,00,000.00", "24,74,691.00", "18,56,018.25", "6,18,672.75", "24,74,691.00", "1,32,773.00"],
+        ["2", "Contingencies", "", "", "1,32,773.00", "1,32,773.00", "", "", ""],
+        ["3", "TSP", "", "", "7,699.00", "", "", "", ""],
+        ["", "Total - A", "", "18,00,000.00", "", "", "", "", ""],
+        ["", "Non Recurring Contingencies\nEquipments\nWorks", "", "", "", "", "", "", ""],
+        ["", "Total - B", "", "", "", "", "", "", ""],
+        ["", "Grand Total A+B", "", "18,00,000.00", "26,07,464.00", "19,88,791.25", "6,18,672.75", "26,07,464.00", ""]
+    ]
+    
+    # Table creation
+    table = doc.add_table(rows=1, cols=len(columns))
+    table.style = 'Table Grid'
+    
+    # Add column headers
+    hdr_cells = table.rows[0].cells
+    for i, column_name in enumerate(columns):
+        hdr_cells[i].text = column_name
+        hdr_cells[i].paragraphs[0].runs[0].bold = True
+        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+    # Add data rows
+    for row_data in data_rows:
+        row_cells = table.add_row().cells
+        for i, cell_data in enumerate(row_data):
+            row_cells[i].text = str(cell_data)
+            row_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+    # Add footer note
+    footer = doc.add_paragraph("\nIn 2025-26 State share released only in Pay and allowances")
+    footer.runs[0].italic = True
+    
+    # Save to BytesIO object
+    bio = io.BytesIO()
+    doc.save(bio)
+    bio.seek(0)
+    return bio
+
+
 # --- 3. THE UI APPLICATION ---
 
 def main():
@@ -657,7 +726,8 @@ def main():
                 try:
                     # Pass the prompt and BOTH files directly to the model
                     response = model_pro.generate_content([full_prompt, pdf_data_email, pdf_data_pfms])
-                    json_str = response.text.replace('```json', '').replace('```', '').strip()
+                    json_str = response.text.replace('```json', '').replace('
+```', '').strip()
                     extracted_inst = json.loads(json_str)
                     st.session_state['pending_installment'] = extracted_inst
                     st.success("Documents analyzed successfully!")
@@ -998,14 +1068,52 @@ def main():
             st.dataframe(current_month_exp, use_container_width=True)
 
         st.divider()
+        st.subheader("Statement of Expenditure (SOE) Preview")
+        
+        columns = [
+            "Sr. No.", 
+            "Head", 
+            "Opening Balance as on 01.04.2025", 
+            "Funds Received from the Council during 2025-26", 
+            "Expenditure up to the month of December 2025", 
+            "Cumulative Expenditure up to 31.12.2025", 
+            "Total", 
+            "ICAR Share", 
+            "State Share"
+        ]
+        
+        data_rows = [
+            ["1", "Recurring Contingencies\nEstablishment Charges", "(-) 1,38,340.60", "18,00,000.00", "24,74,691.00", "18,56,018.25", "6,18,672.75", "24,74,691.00", "1,32,773.00"],
+            ["2", "Contingencies", "", "", "1,32,773.00", "1,32,773.00", "", "", ""],
+            ["3", "TSP", "", "", "7,699.00", "", "", "", ""],
+            ["", "Total - A", "", "18,00,000.00", "", "", "", "", ""],
+            ["", "Non Recurring Contingencies\nEquipments\nWorks", "", "", "", "", "", "", ""],
+            ["", "Total - B", "", "", "", "", "", "", ""],
+            ["", "Grand Total A+B", "", "18,00,000.00", "26,07,464.00", "19,88,791.25", "6,18,672.75", "26,07,464.00", ""]
+        ]
+        
+        df_soe = pd.DataFrame(data_rows, columns=columns)
+        
+        st.markdown("""
+        <style>
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid black !important; padding: 8px; text-align: center; }
+        th { background-color: #f2f2f2; }
+        </style>
+        """, unsafe_allow_html=True)
+
+        st.table(df_soe)
+        st.markdown("*In 2025-26 State share released only in Pay and allowances*")
+        
+        st.divider()
         if st.button("Generate Monthly SOE (Word Doc)", key="soe_btn"):
-            with st.spinner("Calculating balances and creating Word file..."):
-                soe_doc_buffer = generate_soe_word(data, month_to_process, year_to_process)
+            with st.spinner("Creating Word file..."):
+                soe_doc_buffer = generate_soe_word()
                 st.success("SOE Generated!")
                 st.download_button(
-                    label="Download SOE Word File",
+                    label="📄 Download as Word Document (.docx)",
                     data=soe_doc_buffer,
-                    file_name=f"SOE_{selected_fy}_{month_to_process}_{year_to_process}.docx",
+                    file_name="Statement_of_Expenditure_Dec_2025.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
 
