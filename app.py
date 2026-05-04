@@ -3,6 +3,7 @@ import os
 import json
 import pandas as pd
 from datetime import datetime, date
+import calendar
 import google.generativeai as genai
 from docx import Document
 from docx.shared import Inches, Pt
