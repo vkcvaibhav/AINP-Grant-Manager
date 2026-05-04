@@ -39,6 +39,12 @@
             "head": "Pay and Allowances",
             "detail": "Devabhai salary ",
             "amount": 67834.0
+        },
+        {
+            "date": "2026-04-16",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Farm labour- Nagina kaka salary 06 to 15 ",
+            "amount": 2898.0
         }
     ],
     "latest_quarter": "Full Year",
