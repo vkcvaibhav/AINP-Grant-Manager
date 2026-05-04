@@ -627,6 +627,194 @@ def create_annual_word_doc(dataframe, fy_string):
     doc.save(bio)
     bio.seek(0)
     return bio
+    # ---------------------------------------------------------
+# 👇 PASTE THESE NEW FUNCTIONS RIGHT BELOW `create_annual_word_doc` 👇
+# ---------------------------------------------------------
+def generate_auc_forwarding_docx(ref_no, letter_date, subject_text, body_text):
+    """Generates the Forwarding Letter specifically for the AUC."""
+    doc = Document()
+    for section in doc.sections:
+        section.top_margin = Inches(0.4)
+        section.bottom_margin = Inches(0.5)
+        section.left_margin = Inches(0.8)
+        section.right_margin = Inches(0.8)
+        
+    style = doc.styles['Normal']
+    style.font.size = Pt(12)
+    style.paragraph_format.space_after = Pt(0)
+    style.paragraph_format.space_before = Pt(0)
+        
+    table = doc.add_table(rows=1, cols=3)
+    table.autofit = False
+    table.columns[0].width = Inches(1.8)
+    table.columns[1].width = Inches(3.6)
+    table.columns[2].width = Inches(1.4)
+    
+    if 'NAU_LOGO' in globals() and NAU_LOGO and os.path.exists(NAU_LOGO):
+        cell_left = table.cell(0, 0)
+        cell_left.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+        p_left = cell_left.paragraphs[0]
+        p_left.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r_left = p_left.add_run()
+        r_left.add_picture(NAU_LOGO, width=Inches(1.8))
+        
+    p_center = table.cell(0, 1).paragraphs[0]
+    p_center.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_center.paragraph_format.line_spacing = 0.85
+    r1 = p_center.add_run("કીટકશાસ્ત્ર વિભાગ\n")
+    r1.bold = True
+    r1.font.size = Pt(22)
+    r2 = p_center.add_run("ન. મ. કૃષિ મહાવિદ્યાલય\nનવસારી કૃષિ યુનિવર્સિટી\nનવસારી- ૩૯૬ ૪૫૦ (ગુજરાત)")
+    r2.bold = True
+    r2.font.size = Pt(14)
+    
+    if 'ICAR_LOGO' in globals() and ICAR_LOGO and os.path.exists(ICAR_LOGO):
+        p_right = table.cell(0, 2).paragraphs[0]
+        p_right.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r_right = p_right.add_run()
+        r_right.add_picture(ICAR_LOGO, width=Inches(1.5))
+        
+    p_thick1 = doc.add_paragraph()
+    add_bottom_border(p_thick1, size='24')
+    
+    table2 = doc.add_table(rows=1, cols=2)
+    p1 = table2.cell(0,0).paragraphs[0]
+    p1.add_run("ડૉ. જે. જે. પસ્તાગિયા\nપ્રાધ્યાપક અને વડા (ઈ/ચા.)")
+    p2 = table2.cell(0,1).paragraphs[0]
+    p2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p2.add_run("મોબાઇલ: +૯૧ ૯૮૭૯૦ ૩૮૫૩૯\nઇમેલ: headentonau@gmail.com")
+    
+    p_thick2 = doc.add_paragraph()
+    add_bottom_border(p_thick2, size='24')
+    
+    table3 = doc.add_table(rows=1, cols=2)
+    p_ref = table3.cell(0,0).paragraphs[0]
+    p_ref.add_run(f"જા.નં. એસીએન/એન્ટો/{ref_no}/૨૦૨૬, નવસારી")
+    p_date = table3.cell(0,1).paragraphs[0]
+    p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_date.add_run(f"તારીખ: {letter_date}")
+            
+    doc.add_paragraph().paragraph_format.space_after = Pt(6)
+    
+    p_to = doc.add_paragraph()
+    p_to.add_run("પ્રતિ,\n").bold = True
+    p_to.add_run("હિસાબ નિયામકશ્રી\nનવસારી કૃષિ યુનિવર્સિટી\nનવસારી- ૩૯૬ ૪૫૦")
+    p_to.paragraph_format.space_after = Pt(6)
+    
+    p_through = doc.add_paragraph()
+    p_through.add_run("મારફત સવિનય: ").bold = True
+    p_through.add_run("આચાર્ય અને ડિનશ્રી , ન. મ. કૃષિ મહાવિદ્યાલય, ન.કૃ.યુ., નવસારી ૩૯૬ ૪૫૦")
+    p_through.paragraph_format.space_after = Pt(6)
+    
+    p_sub = doc.add_paragraph()
+    p_sub.add_run("વિષય:- ").bold = True
+    p_sub.add_run(subject_text)
+    p_sub.paragraph_format.space_after = Pt(12)
+    
+    p_body = doc.add_paragraph(body_text)
+    p_body.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_body.paragraph_format.first_line_indent = Inches(0.5) 
+    p_body.paragraph_format.space_after = Pt(24)
+    
+    p_enc = doc.add_paragraph("સામેલ: ઉપર મુજબ (AUC)")
+    p_enc.paragraph_format.space_after = Pt(36)
+    
+    table5 = doc.add_table(rows=1, cols=2)
+    p_sig_left = table5.cell(0,0).paragraphs[0]
+    p_sig_left.add_run("પ્રોજેક્ટ ઈન્ચાર્જ").bold = True
+    p_sig_right = table5.cell(0,1).paragraphs[0]
+    p_sig_right.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_sig_right.add_run("પ્રાધ્યાપક અને વડા").bold = True
+    
+    bio = io.BytesIO()
+    doc.save(bio)
+    bio.seek(0)
+    return bio
+
+def generate_auc_certificate(inst_data, t1_data, t2_data, text_vars, fy_string):
+    """Generates the official Audit Utilization Certificate."""
+    doc = Document()
+    for section in doc.sections:
+        section.left_margin = Inches(0.5)
+        section.right_margin = Inches(0.5)
+    
+    style = doc.styles['Normal']
+    style.font.size = Pt(11)
+    
+    # Installment Table
+    inst_table = doc.add_table(rows=1, cols=3)
+    inst_table.style = 'Table Grid'
+    hdr = inst_table.rows[0].cells
+    hdr[0].text = "Sr.No"
+    hdr[1].text = "Letter No and Date"
+    hdr[2].text = "Amount"
+    
+    for row in inst_data:
+        cells = inst_table.add_row().cells
+        cells[0].text = str(row[0])
+        cells[1].text = str(row[1])
+        cells[2].text = str(row[2])
+    
+    doc.add_paragraph()
+    
+    # Certification Text
+    p_cert1 = doc.add_paragraph("Form of Utilization Certificate & Audit Utilization Certificate\n", style='Heading 3')
+    p_cert1.runs[0].font.size = Pt(12)
+    
+    p_text = doc.add_paragraph(
+        f"1. Certified that the out of Rs. {text_vars['tot_remittance']} sanctioned during the year {fy_string} in favour of Comptroller, NAU, Navsari under this Ministry/Department Letter No. given in the margin and Rs. {text_vars['opening_bal']} on account of unspent balance of the previous year, a sum of Rs. {text_vars['tot_icar_exp']} has been Utilized for the purpose of Agril. Acarology Research and remaining unutilized at the end of the year has been surrendered (vide No......Dated......) will be adjusted (to be payable the next year).\n"
+    )
+    p_text.add_run("2. Certified that I have satisfied myself that the condition on which the expenditure was made have dully fulfilled/are being fulfilled and that I have exercised the following check to see that the money was actually utilized for the purpose for which it was sanctioned.")
+    
+    doc.add_paragraph("\nTable 1: Showing the details of receipt and expenditure figure (in Rupees)").runs[0].bold = True
+    
+    # Table 1
+    t1 = doc.add_table(rows=2, cols=5)
+    t1.style = 'Table Grid'
+    fy_start = fy_string.split('-')[0]
+    fy_end = "20" + fy_string.split('-')[1]
+    
+    t1.cell(0,0).text = f"Opening balance as on 1st April {fy_start}"
+    t1.cell(0,1).text = f"Remittance Received {fy_string}"
+    t1.cell(0,2).text = "Receipt"
+    t1.cell(0,3).text = f"ICAR share of Expenditure during the year {fy_string}"
+    t1.cell(0,4).text = f"Closing balance as on 31st March {fy_end}"
+    
+    for i in range(5):
+        t1.cell(1,i).text = str(t1_data[i])
+        
+    doc.add_paragraph("\nTable 2: Showing the head wise details of expenditure figure (in Rupees)").runs[0].bold = True
+    
+    # Table 2
+    t2 = doc.add_table(rows=1, cols=5)
+    t2.style = 'Table Grid'
+    h2 = t2.rows[0].cells
+    h2[0].text = "Head"
+    h2[1].text = f"Allocation for the Year {fy_string} (100%)"
+    h2[2].text = "ICAR share of Expenditure (75%)"
+    h2[3].text = "State Share (25%)"
+    h2[4].text = "Total Expenditure"
+    
+    for row in t2_data:
+        cells = t2.add_row().cells
+        for i in range(5):
+            cells[i].text = str(row[i])
+            if str(row[0]) in ["Recurring", "Non Recurring Contingencies", "Total:-"]:
+                cells[i].paragraphs[0].runs[0].bold = True
+
+    doc.add_paragraph("\n\n")
+    
+    # Signatures
+    sig_table = doc.add_table(rows=1, cols=4)
+    sig_table.cell(0,0).text = "PI of the Scheme\nNAU, Navsari"
+    sig_table.cell(0,1).text = "Director of Research\nNAU, Navsari"
+    sig_table.cell(0,2).text = "Comptroller\nNAU, Navsari"
+    sig_table.cell(0,3).text = "Duly audited and signed by the Chartered Accountant\n\nChartered Accountant"
+    
+    bio = io.BytesIO()
+    doc.save(bio)
+    bio.seek(0)
+    return bio
 
 # --- 3. THE UI APPLICATION ---
 
