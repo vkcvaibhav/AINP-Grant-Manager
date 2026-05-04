@@ -1286,8 +1286,7 @@ def main():
                     file_name=f"SOE_{soe_month}_{soe_year}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
-                )
-
+              
     # --- TAB 7: AI CHATBOT ---
     with tabs[6]:
         st.header("Grant Smart-Assistant")
