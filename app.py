@@ -1151,7 +1151,7 @@ def main():
                 st.dataframe(df_year_sum, use_container_width=True, hide_index=True)
 
 
-    # --- TAB 6: SOE GENERATION ---
+   # --- TAB 6: SOE GENERATION ---
     with tabs[5]:
         st.header("Statement of Expenditure (SOE) Generation")
         
@@ -1171,10 +1171,14 @@ def main():
         soe_month = col_m.selectbox("Select SOE Month", [datetime(2000, m, 1).strftime('%B') for m in range(1, 13)], index=today.month-1, key="soe_m")
         soe_year = col_y.number_input("Select SOE Year", value=today.year, min_value=2024, max_value=2030, key="soe_y")
         
+        # Calculate Financial Year constraints (April 1 to End of Selected Month)
+        fy_start_year = int(selected_fy.split('-')[0])
+        fy_start_date = datetime(fy_start_year, 4, 1) # April 1st of the selected FY
+        
         # Calculate last day of the selected month
         month_idx = list(calendar.month_name).index(soe_month)
         last_day = calendar.monthrange(soe_year, month_idx)[1]
-        end_date = datetime(soe_year, month_idx, last_day)
+        end_date = datetime(soe_year, month_idx, last_day) # Last day of selected month
 
         # 3. Setup Opening Balances Dictionary
         if 'opening_balances' not in data:
@@ -1184,7 +1188,7 @@ def main():
             }
             
         with st.expander(f"⚙️ Set Opening Balances for FY {selected_fy}"):
-            st.write("Save the opening balances carried forward from the previous year. This stays saved for the whole Financial Year.")
+            st.write(f"Save the opening balances carried forward as on 01.04.{fy_start_year}.")
             with st.form("ob_form"):
                 cols = st.columns(3)
                 new_obs = {}
@@ -1207,30 +1211,34 @@ def main():
             "Travelling Allowances (TA)": "TA",
             "Other Recurring Contingencies (ORC)": "Contingencies",
             "TSP": "TSP",
-            "Non-Recurring Contingencies (Equipments/Works)": "Equipments" # Pushed to Equipments as requested
+            "Non-Recurring Contingencies (Equipments/Works)": "Equipments"
         }
 
         ob = data['opening_balances']
         funds = {k: 0.0 for k in ob.keys()}
         exp = {k: 0.0 for k in ob.keys()}
 
-        # Cumulative Funds Received (from Tab 3 PFMS mapping)
+        # Cumulative Funds Received (From April 1 up to end of selected month)
         for inst in data.get('installments', []):
             inst_date = datetime.strptime(inst['date'], "%Y-%m-%d")
-            if inst_date <= end_date:
+            if fy_start_date <= inst_date <= end_date:
                 for h_name, amt in inst.get('heads', {}).items():
                     soe_head = budget_to_soe_map.get(h_name)
-                    if soe_head:
+                    if soe_head in funds:
                         funds[soe_head] += float(amt)
 
-        # Cumulative Expenditure (from Tab 5 Monthly Spend mapping)
+        # Cumulative Expenditure (From April 1 up to end of selected month)
         for e in data.get('expenditure', []):
             e_date = datetime.strptime(e['date'], "%Y-%m-%d")
-            if e_date <= end_date:
-                # This grabs your "Pay and Allowances" etc. and turns it into "Establishment Charges"
+            if fy_start_date <= e_date <= end_date:
+                # Grab the saved head and convert it using the map
                 saved_head = e.get('head') 
                 soe_head = budget_to_soe_map.get(saved_head)
                 
+                # Fallback if they used the cascading dropdown previously
+                if not soe_head:
+                    soe_head = e.get('sub_head')
+                    
                 if soe_head in exp:
                     exp[soe_head] += float(e.get('amount', 0.0))
 
@@ -1269,7 +1277,7 @@ def main():
 
         # 6. Render Data
         columns = [
-            "Sr. No.", "Head", "Opening Balance as on 01.04.2025", f"Funds Received from Council", 
+            "Sr. No.", "Head", f"Opening Balance as on 01.04.{fy_start_year}", f"Funds Received from Council", 
             f"Expenditure up to {soe_month} {soe_year}", "75% ICAR Share", "25% State Share", "Total"
         ]
         
@@ -1285,14 +1293,14 @@ def main():
                 soe_doc_buffer = create_word_doc(edited_df, soe_month, soe_year, last_day)
                 st.success("SOE Generated with dynamic dates and calculations!")
                 
-                # FIXED SYNTAX ERROR HERE
+                # ---> SYNTAX ERROR FIXED HERE <---
                 st.download_button(
                     label="📥 Download SOE Word File",
                     data=soe_doc_buffer,
                     file_name=f"SOE_{soe_month}_{soe_year}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
-              
+
     # --- TAB 7: AI CHATBOT ---
     with tabs[6]:
         st.header("Grant Smart-Assistant")
@@ -1301,6 +1309,8 @@ def main():
         budget_summary = data['revised_allocation'] if data['revised_allocation'] else data['allocation']
         received_summary = sum(inst['amount'] for inst in data['installments'])
         
+        # Safe loading for chatbot
+        df_exp = pd.DataFrame(data.get('expenditure', []))
         spend_summary = {}
         if not df_exp.empty:
             spend_summary = df_exp.groupby('head')['amount'].sum().to_dict()
