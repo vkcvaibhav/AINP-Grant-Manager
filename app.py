@@ -27,7 +27,7 @@ for d in DIRS:
 # AI Setup
 api_key = st.secrets.get("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
-model_pro = genai.GenerativeModel('gemini-1.5-pro-latest')   
+model_pro = genai.GenerativeModel('gemini-3.1-pro-preview')   
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
@@ -342,76 +342,49 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
     doc.save(doc_io)
     doc_io.seek(0)
     return doc_io
-
-def generate_soe_word():
-    """Generates the Native Microsoft Word format for the SOE Table."""
+# ---------------------------------------------------------
+# 👇 PASTE THE NEW FUNCTION RIGHT HERE 👇
+# ---------------------------------------------------------
+def generate_soe_word(data, month, year):
+    """Generates the Statement of Expenditure (SOE) as a Word document."""
     doc = Document()
-    
-    # Set narrow margins for a wide table
-    sections = doc.sections
-    for section in sections:
-        section.left_margin = Inches(0.5)
-        section.right_margin = Inches(0.5)
-    
-    # Headers
-    title = doc.add_paragraph("Statement of Expenditure for the month of December 2025")
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    title.runs[0].bold = True
-    title.runs[0].font.size = Pt(14)
-    
-    doc.add_paragraph("Name of the Centre: Navsari").runs[0].bold = True
-    doc.add_paragraph("Name of the Scheme: AICRP/AINP on Agricultural Acarology, NAU, Navsari").runs[0].bold = True
-    
-    columns = [
-        "Sr. No.", 
-        "Head", 
-        "Opening Balance as on 01.04.2025", 
-        "Funds Received from the Council during 2025-26", 
-        "Expenditure up to the month of December 2025", 
-        "Cumulative Expenditure up to 31.12.2025", 
-        "Total", 
-        "ICAR Share", 
-        "State Share"
+    doc.add_heading(f'Statement of Expenditure - {month} {year}', 0)
+
+    # Filter expenditures for the specific month/year
+    exp_list = data.get('expenditure', [])
+    filtered_exp = [
+        e for e in exp_list 
+        if datetime.strptime(e['date'], "%Y-%m-%d").strftime('%B') == month 
+        and datetime.strptime(e['date'], "%Y-%m-%d").year == year
     ]
-    
-    data_rows = [
-        ["1", "Recurring Contingencies\nEstablishment Charges", "(-) 1,38,340.60", "18,00,000.00", "24,74,691.00", "18,56,018.25", "6,18,672.75", "24,74,691.00", "1,32,773.00"],
-        ["2", "Contingencies", "", "", "1,32,773.00", "1,32,773.00", "", "", ""],
-        ["3", "TSP", "", "", "7,699.00", "", "", "", ""],
-        ["", "Total - A", "", "18,00,000.00", "", "", "", "", ""],
-        ["", "Non Recurring Contingencies\nEquipments\nWorks", "", "", "", "", "", "", ""],
-        ["", "Total - B", "", "", "", "", "", "", ""],
-        ["", "Grand Total A+B", "", "18,00,000.00", "26,07,464.00", "19,88,791.25", "6,18,672.75", "26,07,464.00", ""]
-    ]
-    
-    # Table creation
-    table = doc.add_table(rows=1, cols=len(columns))
+
+    # Add a table
+    table = doc.add_table(rows=1, cols=4)
     table.style = 'Table Grid'
     
-    # Add column headers
+    # Define headers
     hdr_cells = table.rows[0].cells
-    for i, column_name in enumerate(columns):
-        hdr_cells[i].text = column_name
-        hdr_cells[i].paragraphs[0].runs[0].bold = True
-        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-    # Add data rows
-    for row_data in data_rows:
-        row_cells = table.add_row().cells
-        for i, cell_data in enumerate(row_data):
-            row_cells[i].text = str(cell_data)
-            row_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-            
-    # Add footer note
-    footer = doc.add_paragraph("\nIn 2025-26 State share released only in Pay and allowances")
-    footer.runs[0].italic = True
-    
-    # Save to BytesIO object
-    bio = io.BytesIO()
-    doc.save(bio)
-    bio.seek(0)
-    return bio
+    hdr_cells[0].text = 'Date'
+    hdr_cells[1].text = 'Budget Head'
+    hdr_cells[2].text = 'Description'
+    hdr_cells[3].text = 'Amount (₹)'
 
+    total_month_spend = 0
+    for item in filtered_exp:
+        row_cells = table.add_row().cells
+        row_cells[0].text = item['date']
+        row_cells[1].text = item['head']
+        row_cells[2].text = item['detail']
+        row_cells[3].text = f"{item['amount']:,.2f}"
+        total_month_spend += item['amount']
+
+    doc.add_paragraph(f"\nTotal Expenditure for the Month: ₹{total_month_spend:,.2f}")
+    
+    # Save to buffer
+    doc_io = io.BytesIO()
+    doc.save(doc_io)
+    doc_io.seek(0)
+    return doc_io
 
 # --- 3. THE UI APPLICATION ---
 
@@ -726,8 +699,7 @@ def main():
                 try:
                     # Pass the prompt and BOTH files directly to the model
                     response = model_pro.generate_content([full_prompt, pdf_data_email, pdf_data_pfms])
-                    json_str = response.text.replace('```json', '').replace('
-```', '').strip()
+                    json_str = response.text.replace('```json', '').replace('```', '').strip()
                     extracted_inst = json.loads(json_str)
                     st.session_state['pending_installment'] = extracted_inst
                     st.success("Documents analyzed successfully!")
@@ -1068,52 +1040,14 @@ def main():
             st.dataframe(current_month_exp, use_container_width=True)
 
         st.divider()
-        st.subheader("Statement of Expenditure (SOE) Preview")
-        
-        columns = [
-            "Sr. No.", 
-            "Head", 
-            "Opening Balance as on 01.04.2025", 
-            "Funds Received from the Council during 2025-26", 
-            "Expenditure up to the month of December 2025", 
-            "Cumulative Expenditure up to 31.12.2025", 
-            "Total", 
-            "ICAR Share", 
-            "State Share"
-        ]
-        
-        data_rows = [
-            ["1", "Recurring Contingencies\nEstablishment Charges", "(-) 1,38,340.60", "18,00,000.00", "24,74,691.00", "18,56,018.25", "6,18,672.75", "24,74,691.00", "1,32,773.00"],
-            ["2", "Contingencies", "", "", "1,32,773.00", "1,32,773.00", "", "", ""],
-            ["3", "TSP", "", "", "7,699.00", "", "", "", ""],
-            ["", "Total - A", "", "18,00,000.00", "", "", "", "", ""],
-            ["", "Non Recurring Contingencies\nEquipments\nWorks", "", "", "", "", "", "", ""],
-            ["", "Total - B", "", "", "", "", "", "", ""],
-            ["", "Grand Total A+B", "", "18,00,000.00", "26,07,464.00", "19,88,791.25", "6,18,672.75", "26,07,464.00", ""]
-        ]
-        
-        df_soe = pd.DataFrame(data_rows, columns=columns)
-        
-        st.markdown("""
-        <style>
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid black !important; padding: 8px; text-align: center; }
-        th { background-color: #f2f2f2; }
-        </style>
-        """, unsafe_allow_html=True)
-
-        st.table(df_soe)
-        st.markdown("*In 2025-26 State share released only in Pay and allowances*")
-        
-        st.divider()
         if st.button("Generate Monthly SOE (Word Doc)", key="soe_btn"):
-            with st.spinner("Creating Word file..."):
-                soe_doc_buffer = generate_soe_word()
+            with st.spinner("Calculating balances and creating Word file..."):
+                soe_doc_buffer = generate_soe_word(data, month_to_process, year_to_process)
                 st.success("SOE Generated!")
                 st.download_button(
-                    label="📄 Download as Word Document (.docx)",
+                    label="Download SOE Word File",
                     data=soe_doc_buffer,
-                    file_name="Statement_of_Expenditure_Dec_2025.docx",
+                    file_name=f"SOE_{selected_fy}_{month_to_process}_{year_to_process}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
 
