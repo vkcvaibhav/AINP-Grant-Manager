@@ -124,7 +124,7 @@
     "latest_quarter": "Q4 Release",
     "latest_date": "2026-01-28",
     "opening_balances": {
-        "Establishment Charges": 0.0,
+        "Establishment Charges": 100000.0,
         "TA": 0.0,
         "Contingencies": 0.0,
         "TSP": 0.0,
