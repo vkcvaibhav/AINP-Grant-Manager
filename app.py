@@ -202,7 +202,7 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
         p_right = table.cell(0, 2).paragraphs[0]
         p_right.alignment = WD_ALIGN_PARAGRAPH.CENTER
         r_right = p_right.add_run()
-        r_right.add_picture(ICAR_LOGO, width=Inches(1.2))
+        r_right.add_picture(ICAR_LOGO, width=Inches(2.0))
         
     # Draw Thick Black Separator Line
     p_thick = doc.add_paragraph()
