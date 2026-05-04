@@ -1058,7 +1058,7 @@ def main():
                 st.success(f"Funds for Installment {inst_to_activate} are now READY FOR UTILIZATION.")
 
 
- # --- TAB 5: MONTHLY SPEND ---
+# --- TAB 5: MONTHLY SPEND ---
     with tabs[4]:
         st.header("Monthly Expenditure Tracking")
         
@@ -1067,23 +1067,38 @@ def main():
         year_to_process = st.number_input("Year", value=today.year, min_value=2024, max_value=2030)
 
         with st.expander("Add New Expenditure Entry", expanded=True):
-            with st.form("spend_form", clear_on_submit=True):
-                col1, col2 = st.columns(2)
-                exp_date = col1.date_input("Expenditure Date")
-                exp_head = col1.selectbox("Budget Head", BUDGET_HEADS)
-                exp_amt = col2.number_input("Amount Spent (₹)", min_value=0.0)
-                exp_detail = col2.text_area("Expenditure Details/Voucher Info")
+            # We remove st.form here because forms do not allow dynamic/cascading dropdowns to update live
+            col1, col2 = st.columns(2)
+            
+            exp_date = col1.date_input("Expenditure Date")
+            
+            # 1. Main Category Dropdown
+            main_cat = col1.selectbox("Main Budget Head", ["Recurring Contingencies", "Non Recurring Contingencies"])
+            
+            # 2. Dynamic Sub-Category Dropdown based on Main Category selection
+            if main_cat == "Recurring Contingencies":
+                sub_opts = ["Establishment Charges", "TA", "Contingencies", "TSP"]
+            else:
+                sub_opts = ["Equipments", "Works"]
                 
-                if st.form_submit_button("Add Entry"):
-                    new_exp = {
-                        "date": exp_date.strftime("%Y-%m-%d"),
-                        "head": exp_head,
-                        "detail": exp_detail,
-                        "amount": exp_amt
-                    }
-                    data['expenditure'].append(new_exp)
-                    save_data(data, selected_fy)
-                    st.toast("Expenditure Added and Backed up.")
+            sub_cat = col2.selectbox("SOE Sub-Head", sub_opts)
+            
+            exp_amt = col1.number_input("Amount Spent (₹)", min_value=0.0)
+            exp_detail = col2.text_area("Expenditure Details/Voucher Info")
+            
+            # 3. Standard button to save data
+            if st.button("💾 Add Expenditure Entry"):
+                new_exp = {
+                    "date": exp_date.strftime("%Y-%m-%d"),
+                    "head": main_cat,
+                    "sub_head": sub_cat,
+                    "detail": exp_detail,
+                    "amount": exp_amt
+                }
+                data['expenditure'].append(new_exp)
+                save_data(data, selected_fy)
+                st.success(f"Expenditure added directly to {sub_cat}!")
+                st.rerun() # Refresh the UI instantly to show the new row in the table
 
         # Re-initialize df_exp here so both this tab and the chatbot can see it
         df_exp = pd.DataFrame(data.get('expenditure', []))
@@ -1095,7 +1110,14 @@ def main():
                 (df_exp['date'].dt.year == year_to_process)
             ]
             st.subheader(f"Spend in {month_to_process} {year_to_process}")
-            st.dataframe(current_month_exp, use_container_width=True)
+            
+            # Display the table cleanly with the new Main/Sub structure
+            if not current_month_exp.empty:
+                display_df = current_month_exp[['date', 'head', 'sub_head', 'detail', 'amount']].copy()
+                display_df.columns = ["Date", "Main Category", "SOE Sub-Head", "Details", "Amount (₹)"]
+                st.dataframe(display_df, use_container_width=True)
+            else:
+                st.info(f"No expenditure recorded for {month_to_process} {year_to_process}.")
 
     # --- TAB 6: SOE GENERATION ---
     with tabs[5]:
