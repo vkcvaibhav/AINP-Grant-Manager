@@ -1201,8 +1201,8 @@ def main():
         st.markdown("**Name of the Scheme:** AICRP/AINP on Agricultural Acarology, NAU, Navsari")
 
         # 4. Data Gathering & Mapping Logic
-        # Mapping standard Installment Budget Heads to SOE Sub-Heads
-        inst_to_soe_map = {
+        # Mapping standard Budget Heads to SOE Sub-Heads
+        budget_to_soe_map = {
             "Pay and Allowances": "Establishment Charges",
             "Travelling Allowances (TA)": "TA",
             "Other Recurring Contingencies (ORC)": "Contingencies",
@@ -1214,22 +1214,25 @@ def main():
         funds = {k: 0.0 for k in ob.keys()}
         exp = {k: 0.0 for k in ob.keys()}
 
-        # Cumulative Funds Received
+        # Cumulative Funds Received (from Tab 3 PFMS mapping)
         for inst in data.get('installments', []):
             inst_date = datetime.strptime(inst['date'], "%Y-%m-%d")
             if inst_date <= end_date:
                 for h_name, amt in inst.get('heads', {}).items():
-                    soe_head = inst_to_soe_map.get(h_name)
+                    soe_head = budget_to_soe_map.get(h_name)
                     if soe_head:
                         funds[soe_head] += float(amt)
 
-        # Cumulative Expenditure
+        # Cumulative Expenditure (from Tab 5 Monthly Spend mapping)
         for e in data.get('expenditure', []):
             e_date = datetime.strptime(e['date'], "%Y-%m-%d")
             if e_date <= end_date:
-                sub_head = e.get('sub_head')
-                if sub_head in exp:
-                    exp[sub_head] += float(e.get('amount', 0.0))
+                # This grabs your "Pay and Allowances" etc. and turns it into "Establishment Charges"
+                saved_head = e.get('head') 
+                soe_head = budget_to_soe_map.get(saved_head)
+                
+                if soe_head in exp:
+                    exp[soe_head] += float(e.get('amount', 0.0))
 
         # 5. Build the Data Table Array
         data_table = []
@@ -1281,6 +1284,8 @@ def main():
             with st.spinner("Creating formatted Word file..."):
                 soe_doc_buffer = create_word_doc(edited_df, soe_month, soe_year, last_day)
                 st.success("SOE Generated with dynamic dates and calculations!")
+                
+                # FIXED SYNTAX ERROR HERE
                 st.download_button(
                     label="📥 Download SOE Word File",
                     data=soe_doc_buffer,
