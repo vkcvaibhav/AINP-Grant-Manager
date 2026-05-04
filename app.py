@@ -731,14 +731,21 @@ def generate_auc_forwarding_docx(ref_no, letter_date, subject_text, body_text):
     bio.seek(0)
     return bio
 
+# ---------------------------------------------------------
+# 👇 REPLACE YOUR CURRENT `generate_auc_certificate` FUNCTION
+# ---------------------------------------------------------
 def generate_auc_certificate(inst_data, t1_data, t2_data, text_vars, fy_string):
     """Generates the official Audit Utilization Certificate."""
     doc = Document()
+    
+    # Set Margins
     for section in doc.sections:
         section.left_margin = Inches(0.5)
         section.right_margin = Inches(0.5)
     
+    # Force Times New Roman Font globally
     style = doc.styles['Normal']
+    style.font.name = 'Times New Roman'
     style.font.size = Pt(11)
     
     # Installment Table
@@ -754,19 +761,28 @@ def generate_auc_certificate(inst_data, t1_data, t2_data, text_vars, fy_string):
         cells[0].text = str(row[0])
         cells[1].text = str(row[1])
         cells[2].text = str(row[2])
+        
+    for row in inst_table.rows:
+        for cell in row.cells:
+            for paragraph in cell.paragraphs:
+                paragraph.style = doc.styles['Normal']
     
     doc.add_paragraph()
     
     # Certification Text
-    p_cert1 = doc.add_paragraph("Form of Utilization Certificate & Audit Utilization Certificate\n", style='Heading 3')
-    p_cert1.runs[0].font.size = Pt(12)
+    p_cert1 = doc.add_paragraph()
+    run_cert1 = p_cert1.add_run("Form of Utilization Certificate & Audit Utilization Certificate")
+    run_cert1.bold = True
+    run_cert1.font.size = Pt(12)
+    run_cert1.font.name = 'Times New Roman'
     
     p_text = doc.add_paragraph(
         f"1. Certified that the out of Rs. {text_vars['tot_remittance']} sanctioned during the year {fy_string} in favour of Comptroller, NAU, Navsari under this Ministry/Department Letter No. given in the margin and Rs. {text_vars['opening_bal']} on account of unspent balance of the previous year, a sum of Rs. {text_vars['tot_icar_exp']} has been Utilized for the purpose of Agril. Acarology Research and remaining unutilized at the end of the year has been surrendered (vide No......Dated......) will be adjusted (to be payable the next year).\n"
     )
     p_text.add_run("2. Certified that I have satisfied myself that the condition on which the expenditure was made have dully fulfilled/are being fulfilled and that I have exercised the following check to see that the money was actually utilized for the purpose for which it was sanctioned.")
     
-    doc.add_paragraph("\nTable 1: Showing the details of receipt and expenditure figure (in Rupees)").runs[0].bold = True
+    p_t1_title = doc.add_paragraph("\nTable 1: Showing the details of receipt and expenditure figure (in Rupees)")
+    p_t1_title.runs[0].bold = True
     
     # Table 1
     t1 = doc.add_table(rows=2, cols=5)
@@ -783,7 +799,13 @@ def generate_auc_certificate(inst_data, t1_data, t2_data, text_vars, fy_string):
     for i in range(5):
         t1.cell(1,i).text = str(t1_data[i])
         
-    doc.add_paragraph("\nTable 2: Showing the head wise details of expenditure figure (in Rupees)").runs[0].bold = True
+    for row in t1.rows:
+        for cell in row.cells:
+            for paragraph in cell.paragraphs:
+                paragraph.style = doc.styles['Normal']
+        
+    p_t2_title = doc.add_paragraph("\nTable 2: Showing the head wise details of expenditure figure (in Rupees)")
+    p_t2_title.runs[0].bold = True
     
     # Table 2
     t2 = doc.add_table(rows=1, cols=5)
@@ -799,6 +821,7 @@ def generate_auc_certificate(inst_data, t1_data, t2_data, text_vars, fy_string):
         cells = t2.add_row().cells
         for i in range(5):
             cells[i].text = str(row[i])
+            cells[i].paragraphs[0].style = doc.styles['Normal']
             if str(row[0]) in ["Recurring", "Non Recurring Contingencies", "Total:-"]:
                 cells[i].paragraphs[0].runs[0].bold = True
 
@@ -810,6 +833,11 @@ def generate_auc_certificate(inst_data, t1_data, t2_data, text_vars, fy_string):
     sig_table.cell(0,1).text = "Director of Research\nNAU, Navsari"
     sig_table.cell(0,2).text = "Comptroller\nNAU, Navsari"
     sig_table.cell(0,3).text = "Duly audited and signed by the Chartered Accountant\n\nChartered Accountant"
+    
+    for row in sig_table.rows:
+        for cell in row.cells:
+            for paragraph in cell.paragraphs:
+                paragraph.style = doc.styles['Normal']
     
     bio = io.BytesIO()
     doc.save(bio)
