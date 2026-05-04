@@ -33,6 +33,12 @@
             "head": "Pay and Allowances",
             "detail": "Dr. Vaibhav salary ",
             "amount": 133468.0
+        },
+        {
+            "date": "2026-05-04",
+            "head": "Pay and Allowances",
+            "detail": "Devabhai salary ",
+            "amount": 67834.0
         }
     ],
     "latest_quarter": "Full Year",
