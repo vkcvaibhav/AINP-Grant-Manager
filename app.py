@@ -1026,52 +1026,56 @@ def main():
                 st.success(f"Funds for Installment {inst_to_activate} are now READY FOR UTILIZATION.")
 
 
-    # --- TAB 5: MONTHLY SPEND & SOE ---
+   # --- TAB 5: MONTHLY SPEND & SOE ---
     with tabs[4]:
         st.header("Monthly Expenditure & SOE Generation")
         
-        today = date.today()
-        month_to_process = st.selectbox("Month", [datetime(2000, m, 1).strftime('%B') for m in range(1, 13)], index=today.month-1)
-        year_to_process = st.number_input("Year", value=today.year, min_value=2024, max_value=2030)
+        # --- NEW FORMATTED UI PASTED HERE ---
+        st.markdown("<h3 style='text-align: center;'>Statement of Expenditure for the month of December 2025</h3>", unsafe_allow_html=True)
+        st.markdown("**Name of the Centre:** Navsari")
+        st.markdown("**Name of the Scheme:** AICRP/AINP on Agricultural Acarology, NAU, Navsari")
 
-        with st.expander("Add New Expenditure Entry", expanded=True):
-            with st.form("spend_form", clear_on_submit=True):
-                col1, col2 = st.columns(2)
-                exp_date = col1.date_input("Expenditure Date")
-                exp_head = col1.selectbox("Budget Head", BUDGET_HEADS)
-                exp_amt = col2.number_input("Amount Spent (₹)", min_value=0.0)
-                exp_detail = col2.text_area("Expenditure Details/Voucher Info")
-                
-                if st.form_submit_button("Add Entry"):
-                    new_exp = {
-                        "date": exp_date.strftime("%Y-%m-%d"),
-                        "head": exp_head,
-                        "detail": exp_detail,
-                        "amount": exp_amt
-                    }
-                    data['expenditure'].append(new_exp)
-                    save_data(data, selected_fy)
-                    st.toast("Expenditure Added and Backed up.")
+        # Your hardcoded data
+        columns = [
+            "Sr. No.", "Head", "Opening Balance as on 01.04.2025", 
+            "Funds Received from the Council during 2025-26", 
+            "Expenditure up to the month of December 2025", 
+            "Cumulative Expenditure up to 31.12.2025", 
+            "Total", "ICAR Share", "State Share"
+        ]
+        data_table = [
+            ["1", "Recurring Contingencies\nEstablishment Charges", "(-) 1,38,340.60", "18,00,000.00", "24,74,691.00", "18,56,018.25", "6,18,672.75", "24,74,691.00", "1,32,773.00"],
+            ["2", "Contingencies", "", "", "1,32,773.00", "1,32,773.00", "", "", ""],
+            ["3", "TSP", "", "", "7,699.00", "", "", "", ""],
+            ["", "Total - A", "", "18,00,000.00", "", "", "", "", ""],
+            ["", "Non Recurring Contingencies\nEquipments\nWorks", "", "", "", "", "", "", ""],
+            ["", "Total - B", "", "", "", "", "", "", ""],
+            ["", "Grand Total A+B", "", "18,00,000.00", "26,07,464.00", "19,88,791.25", "6,18,672.75", "26,07,464.00", ""]
+        ]
 
-        df_exp = pd.DataFrame(data['expenditure'])
-        if not df_exp.empty:
-            df_exp['date'] = pd.to_datetime(df_exp['date'])
-            current_month_exp = df_exp[
-                (df_exp['date'].dt.strftime('%B') == month_to_process) & 
-                (df_exp['date'].dt.year == year_to_process)
-            ]
-            st.subheader(f"Spend in {month_to_process} {year_to_process}")
-            st.dataframe(current_month_exp, use_container_width=True)
+        df_soe = pd.DataFrame(data_table, columns=columns)
+
+        # CSS to inject for exact table borders
+        st.markdown("""
+        <style>
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid black !important; padding: 8px; text-align: center; }
+        th { background-color: #f2f2f2; }
+        </style>
+        """, unsafe_allow_html=True)
+
+        st.table(df_soe)
+        st.markdown("*In 2025-26 State share released only in Pay and allowances*")
 
         st.divider()
-        if st.button("Generate Monthly SOE (Word Doc)", key="soe_btn"):
-            with st.spinner("Calculating balances and creating Word file..."):
-                soe_doc_buffer = generate_soe_word(data, month_to_process, year_to_process)
+        if st.button("Generate SOE Word Document", key="soe_btn_new"):
+            with st.spinner("Creating Word file..."):
+                soe_doc_buffer = create_word_doc()
                 st.success("SOE Generated!")
                 st.download_button(
-                    label="Download SOE Word File",
+                    label="📥 Download SOE Word File",
                     data=soe_doc_buffer,
-                    file_name=f"SOE_{selected_fy}_{month_to_process}_{year_to_process}.docx",
+                    file_name="SOE_December_2025.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
 
