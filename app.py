@@ -9,6 +9,7 @@ from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_ALIGN_VERTICAL
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.enum.section import WD_ORIENTATION
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
 from fpdf import FPDF
@@ -351,8 +352,14 @@ def create_word_doc(dataframe):
     # Set narrow margins for a wide table
     sections = doc.sections
     for section in sections:
+        section.orientation = WD_ORIENTATION.LANDSCAPE
+        # Swap width and height to actually apply the landscape dimensions
+        section.page_width, section.page_height = section.page_height, section.page_width
+        
         section.left_margin = Inches(0.5)
         section.right_margin = Inches(0.5)
+        section.top_margin = Inches(0.5)
+        section.bottom_margin = Inches(0.5)
     
     # Headers
     title = doc.add_paragraph("Statement of Expenditure for the month of December 2025")
