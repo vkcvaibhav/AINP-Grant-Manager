@@ -41,13 +41,13 @@
             "installment_num": "N/A",
             "purpose": "GIA-Salary",
             "pfms_id": "IDIBR52026041601672704",
-            "amount": 250000.0,
+            "amount": 490000.0,
             "heads": {
                 "Pay and Allowances": 250000.0,
-                "Travelling Allowances (TA)": 0.0,
-                "Other Recurring Contingencies (ORC)": 0.0,
-                "Non-Recurring Contingencies (Equipments/Works)": 0.0,
-                "TSP": 0.0
+                "Travelling Allowances (TA)": 10000.0,
+                "Other Recurring Contingencies (ORC)": 10000.0,
+                "Non-Recurring Contingencies (Equipments/Works)": 100000.0,
+                "TSP": 120000.0
             },
             "type": "N/A",
             "available": false
