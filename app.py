@@ -211,12 +211,18 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
         r_right = p_right.add_run()
         r_right.add_picture(ICAR_LOGO, width=Inches(1.5))
         
-    # Draw Thick Black Separator Line
-    p_thick = doc.add_paragraph()
+    # Ensure inner paragraphs of table2 have zero spacing
+    for cell in table2.rows[0].cells:
+        for p in cell.paragraphs:
+            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.space_before = Pt(0)
+            
+    # Draw Thin Black Separator Line
+    p_thin = doc.add_paragraph()
     p_thin.paragraph_format.space_before = Pt(0)
     p_thin.paragraph_format.space_after = Pt(0)
     p_thin.add_run().font.size = Pt(1)
-    add_bottom_border(p_thick, size='24')
+    add_bottom_border(p_thin, size='8')
     
     # 2. Sender Info Block
     table2 = doc.add_table(rows=1, cols=2)
@@ -237,12 +243,18 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
             p.paragraph_format.space_after = Pt(0)
             p.paragraph_format.space_before = Pt(0)
     
+    # Ensure inner paragraphs of table2 have zero spacing
+    for cell in table2.rows[0].cells:
+        for p in cell.paragraphs:
+            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.space_before = Pt(0)
+            
     # Draw Thin Black Separator Line
     p_thin = doc.add_paragraph()
     p_thin.paragraph_format.space_before = Pt(0)
     p_thin.paragraph_format.space_after = Pt(0)
     p_thin.add_run().font.size = Pt(1)
-    add_bottom_border(p_thin, size='24') 
+    add_bottom_border(p_thin, size='8')
     
     # 3. Reference No & Date
     table3 = doc.add_table(rows=1, cols=2)
