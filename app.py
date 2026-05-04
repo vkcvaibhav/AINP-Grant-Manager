@@ -1165,18 +1165,23 @@ def main():
             val = f"{r}{d[0]}{d[1]}"
             return f"(-) {val}" if is_neg else val
 
-        # 2. Controls for Date Selection
-        col_m, col_y = st.columns(2)
-        today = date.today()
-        soe_month = col_m.selectbox("Select SOE Month", [datetime(2000, m, 1).strftime('%B') for m in range(1, 13)], index=today.month-1, key="soe_m")
-        soe_year = col_y.number_input("Select SOE Year", value=today.year, min_value=2024, max_value=2030, key="soe_y")
-        
-        # Calculate Financial Year constraints (April 1 to End of Selected Month)
+        # 2. Controls for Date Selection (SMART LINKED TO FY)
         fy_start_year = int(selected_fy.split('-')[0])
+        fy_end_year = fy_start_year + 1
         fy_start_date = datetime(fy_start_year, 4, 1) # April 1st of the selected FY
         
-        # Calculate last day of the selected month
+        soe_month = st.selectbox("Select SOE Month", [calendar.month_name[m] for m in range(1, 13)], index=date.today().month-1, key="soe_m")
         month_idx = list(calendar.month_name).index(soe_month)
+        
+        # SMART YEAR LOGIC: Jan, Feb, Mar belong to the end year of the FY. April-Dec belong to the start year.
+        if month_idx in [1, 2, 3]:
+            soe_year = fy_end_year
+        else:
+            soe_year = fy_start_year
+            
+        st.info(f"📅 **Generating SOE for:** {soe_month} {soe_year} (Automatically linked to FY {selected_fy})")
+        
+        # Calculate last day of the selected month
         last_day = calendar.monthrange(soe_year, month_idx)[1]
         end_date = datetime(soe_year, month_idx, last_day) # Last day of selected month
 
@@ -1194,6 +1199,7 @@ def main():
                 cols = st.columns(3)
                 new_obs = {}
                 for idx, (k, v) in enumerate(data['opening_balances'].items()):
+                    # The unique key forces Streamlit to wipe the box clean when the FY changes
                     new_obs[k] = cols[idx % 3].number_input(
                         f"{k} (₹)", 
                         value=float(v), 
@@ -1223,7 +1229,6 @@ def main():
             if "PAY" in rs or "ESTABLISHMENT" in rs: return "Establishment Charges"
             if "TA" in rs or "TRAVELLING" in rs: return "TA"
             if "TSP" in rs: return "TSP"
-            # "NON" covers "Non-Recurring", must check this before general "Contingencies"
             if "NON" in rs or "EQUIP" in rs or "WORK" in rs: return "Equipments" 
             if "ORC" in rs or "CONTINGENC" in rs or "RECURRING" in rs: return "Contingencies"
             return None
