@@ -179,8 +179,8 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
     
     # Left Logo (NAU)
     if 'NAU_LOGO' in globals() and NAU_LOGO and os.path.exists(NAU_LOGO):
-        p_left = table.cell(0, 0)
-        p_left.alignment = WD_ALIGN_PARAGRAPH.BOTTOM
+        cell_left = table.cell(0, 0)
+        cell_left.vertical_alignment = WD_ALIGN_VERTICAL.BOTTOM
 
         p_left = cell_left.paragraphs[0]
         p_left.alignment = WD_ALIGN_PARAGRAPH.CENTER
