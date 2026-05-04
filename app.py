@@ -449,6 +449,82 @@ def create_word_doc(dataframe, month_name, year_num, last_day):
     doc.save(bio)
     bio.seek(0)
     return bio
+    # ---------------------------------------------------------
+# 👇 PASTE THIS NEW FUNCTION RIGHT AFTER `create_word_doc`
+# ---------------------------------------------------------
+def create_yearly_word_doc(dataframe, fy_string):
+    doc = Document()
+    
+    # Set narrow margins and change orientation to LANDSCAPE
+    sections = doc.sections
+    for section in sections:
+        section.orientation = WD_ORIENTATION.LANDSCAPE
+        section.page_width, section.page_height = section.page_height, section.page_width
+        
+        section.left_margin = Inches(0.4)
+        section.right_margin = Inches(0.4)
+        section.top_margin = Inches(0.5)
+        section.bottom_margin = Inches(0.5)
+    
+    # Headers
+    title = doc.add_paragraph()
+    run_title = title.add_run(f"12-Month Expenditure Summary for FY {fy_string}")
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_title.bold = True
+    run_title.font.size = Pt(14)
+    
+    doc.add_paragraph("Name of the Centre: Navsari").runs[0].bold = True
+    doc.add_paragraph("Name of the Scheme: AICRP/AINP on Agricultural Acarology, NAU, Navsari").runs[0].bold = True
+    
+    columns = dataframe.columns.tolist()
+    
+    # Create Table
+    table = doc.add_table(rows=1, cols=len(columns))
+    table.style = 'Table Grid'
+    
+    # --- Add Column Headers ---
+    hdr_cells = table.rows[0].cells
+    for i, column_name in enumerate(columns):
+        hdr_cells[i].text = column_name
+        hdr_cells[i].paragraphs[0].runs[0].bold = True
+        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        hdr_cells[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+
+    # --- Add Data Rows ---
+    for index, row in dataframe.iterrows():
+        row_cells = table.add_row().cells
+        head_val = str(row.iloc[0])
+        is_bold_row = head_val in ["A. Recurring Contingencies", "B. Non Recurring Contingencies", "Total - A", "Total - B", "Grand Total A+B"]
+        
+        for i, cell_data in enumerate(row):
+            text_val = str(cell_data) if pd.notna(cell_data) else ""
+            row_cells[i].text = text_val
+            
+            # Left align the Head column, center the numbers
+            if i == 0:
+                row_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+            else:
+                row_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                
+            row_cells[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            
+            if is_bold_row:
+                row_cells[i].paragraphs[0].runs[0].bold = True
+                
+        # Apply yellow background shading to Category Rows
+        if head_val in ["A. Recurring Contingencies", "B. Non Recurring Contingencies"]:
+            for cell in row_cells:
+                tcPr = cell._tc.get_or_add_tcPr()
+                shd = OxmlElement('w:shd')
+                shd.set(qn('w:val'), 'clear')
+                shd.set(qn('w:color'), 'auto')
+                shd.set(qn('w:fill'), 'FFFF00')
+                tcPr.append(shd)
+            
+    bio = io.BytesIO()
+    doc.save(bio)
+    bio.seek(0)
+    return bio
 
 # --- 3. THE UI APPLICATION ---
 
@@ -1308,6 +1384,100 @@ def main():
                     label="📥 Download SOE Word File",
                     data=soe_doc_buffer,
                     file_name=f"SOE_{soe_month}_{soe_year}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+                # =====================================================================
+        # 👇 NEW SECTION: 12-MONTH YEARLY SUMMARY TABLE 👇
+        # =====================================================================
+        st.divider()
+        st.markdown(f"<h3 style='text-align: center;'>12-Month Expenditure Summary (FY {selected_fy})</h3>", unsafe_allow_html=True)
+        
+        # Define the 12 months from April to March
+        months_order = ['April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March']
+        short_months = [m[:3] for m in months_order] # e.g., 'Apr', 'May' for table columns
+        
+        # Initialize dictionary to hold 12 months of data for each head
+        yearly_exp = {
+            "Establishment Charges": {m: 0.0 for m in months_order},
+            "TA": {m: 0.0 for m in months_order},
+            "Contingencies": {m: 0.0 for m in months_order},
+            "TSP": {m: 0.0 for m in months_order},
+            "Equipments": {m: 0.0 for m in months_order},
+            "Works": {m: 0.0 for m in months_order},
+        }
+        
+        fy_end_date = datetime(fy_end_year, 3, 31) # Ends March 31st
+
+        # Distribute all expenditures from the FY into their exact month buckets
+        for e in data.get('expenditure', []):
+            e_date = datetime.strptime(e['date'], "%Y-%m-%d")
+            if fy_start_date <= e_date <= fy_end_date:
+                m_name = calendar.month_name[e_date.month]
+                combined_head = f"{e.get('head', '')} {e.get('sub_head', '')}"
+                soe_head = get_smart_soe_head(combined_head) # Reuses your smart matcher!
+                
+                if soe_head in yearly_exp:
+                    yearly_exp[soe_head][m_name] += float(e.get('amount', 0.0))
+
+        # Build the 14-column layout for the Yearly Table
+        y_table = []
+        y_cols = ["Budget Head"] + short_months + ["Total"]
+
+        y_table.append(["A. Recurring Contingencies"] + [""] * 13)
+
+        # Calculate A (Recurring)
+        tot_A_y = [0.0] * 13 # 12 months + 1 total
+        for head in ["Establishment Charges", "TA", "Contingencies", "TSP"]:
+            row = [head]
+            row_tot = 0.0
+            for i, m in enumerate(months_order):
+                val = yearly_exp[head][m]
+                row.append(format_inr(val))
+                row_tot += val
+                tot_A_y[i] += val
+            row.append(format_inr(row_tot))
+            tot_A_y[12] += row_tot
+            y_table.append(row)
+
+        y_table.append(["Total - A"] + [format_inr(v) for v in tot_A_y])
+        y_table.append(["B. Non Recurring Contingencies"] + [""] * 13)
+
+        # Calculate B (Non-Recurring)
+        tot_B_y = [0.0] * 13
+        for head in ["Equipments", "Works"]:
+            row = [head]
+            row_tot = 0.0
+            for i, m in enumerate(months_order):
+                val = yearly_exp[head][m]
+                row.append(format_inr(val))
+                row_tot += val
+                tot_B_y[i] += val
+            row.append(format_inr(row_tot))
+            tot_B_y[12] += row_tot
+            y_table.append(row)
+
+        y_table.append(["Total - B"] + [format_inr(v) for v in tot_B_y])
+
+        # Grand Total Calculation
+        g_tot_y = [tot_A_y[i] + tot_B_y[i] for i in range(13)]
+        y_table.append(["Grand Total A+B"] + [format_inr(v) for v in g_tot_y])
+
+        # Render Yearly Data
+        df_yearly = pd.DataFrame(y_table, columns=y_cols)
+        
+        st.markdown("💡 **Tip: Click to edit values before downloading your 12-Month Summary.**")
+        edited_yearly_df = st.data_editor(df_yearly, use_container_width=True, hide_index=True, key="yearly_summary_editor")
+
+        # Separate Download Button for 12-Month Summary
+        if st.button("Generate 12-Month Summary Word Doc", key="yearly_btn_new"):
+            with st.spinner("Creating wide landscape Word file..."):
+                yearly_doc_buffer = create_yearly_word_doc(edited_yearly_df, selected_fy)
+                st.success("12-Month Summary Generated!")
+                
+                st.download_button(
+                    label="📥 Download Yearly Summary Word File",
+                    data=yearly_doc_buffer,
+                    file_name=f"12_Month_Summary_FY_{selected_fy}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
 
