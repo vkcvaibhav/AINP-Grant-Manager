@@ -45,6 +45,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Farm labour- Nagina kaka salary 06 to 15 ",
             "amount": 2898.0
+        },
+        {
+            "date": "2026-05-01",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Farm labour- Naginkaka 16 to 30/4/2026",
+            "amount": 7452.0
         }
     ],
     "latest_quarter": "Full Year",
