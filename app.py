@@ -138,7 +138,7 @@ def process_upload_with_ai(uploaded_file, prompt_task):
         return None
 
 # --- C. Output Generation (PDF/WORD) ---
-    def add_bottom_border(paragraph, size='24'):
+def add_bottom_border(paragraph, size='24'):
     """Adds a bottom border to a paragraph. Size '24' is a thick 3pt line, '8' is a thin 1pt line."""
     p = paragraph._p
     pPr = p.get_or_add_pPr()
