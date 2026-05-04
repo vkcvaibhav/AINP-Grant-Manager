@@ -27,7 +27,14 @@
             "available": false
         }
     ],
-    "expenditure": [],
+    "expenditure": [
+        {
+            "date": "2026-05-04",
+            "head": "Pay and Allowances",
+            "detail": "Dr. Vaibhav salary ",
+            "amount": 133468.0
+        }
+    ],
     "latest_quarter": "Full Year",
     "latest_date": "N/A"
 }
