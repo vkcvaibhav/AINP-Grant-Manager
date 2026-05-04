@@ -358,40 +358,83 @@ def create_word_doc(dataframe):
     title = doc.add_paragraph("Statement of Expenditure for the month of December 2025")
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     title.runs[0].bold = True
-    title.runs[0].font.size = Pt(14)
+    title.runs[0].font.size = Pt(12)
     
     doc.add_paragraph("Name of the Centre: Navsari").runs[0].bold = True
     doc.add_paragraph("Name of the Scheme: AICRP/AINP on Agricultural Acarology, NAU, Navsari").runs[0].bold = True
     
-    columns = dataframe.columns.tolist()
-    
-    # Table creation
-    table = doc.add_table(rows=1, cols=len(columns))
+    # Create Table with 2 header rows to match the image's merged layout
+    table = doc.add_table(rows=2, cols=8)
     table.style = 'Table Grid'
     
-    # Add column headers
-    hdr_cells = table.rows[0].cells
-    for i, column_name in enumerate(columns):
-        hdr_cells[i].text = column_name
-        hdr_cells[i].paragraphs[0].runs[0].bold = True
-        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-    # Add data rows from the edited dataframe
+    # --- ROW 0: Top Level Headers ---
+    hdr0 = table.rows[0].cells
+    hdr0[0].text = "Sr.\nNo."
+    hdr0[1].text = "Head"
+    hdr0[2].text = "Opening Balance\nas on 01.04.2025"
+    hdr0[3].text = "Funds Received\nfrom the Council\nduring 2025-26"
+    hdr0[4].text = "Expenditure up to\nthe month of December\n2025"
+    hdr0[5].text = "Cumulative Expenditure\nup to 31.12.2025"
+    # Col 6 is merged with Col 5
+    hdr0[7].text = "Total"
+    
+    # Merge "Cumulative Expenditure" across the two share columns
+    hdr0[5].merge(hdr0[6])
+    
+    # --- ROW 1: Sub Headers ---
+    hdr1 = table.rows[1].cells
+    hdr1[5].text = "75%\nICAR Share"
+    hdr1[6].text = "25%\nState Share"
+    
+    # Merge vertical columns for headers that span both rows
+    for c in [0, 1, 2, 3, 4, 7]:
+        table.cell(0, c).merge(table.cell(1, c))
+    
+    # Format all header cells
+    for row_idx in [0, 1]:
+        for cell in table.rows[row_idx].cells:
+            for paragraph in cell.paragraphs:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for run in paragraph.runs:
+                    run.bold = True
+            cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+
+    # --- Add Data Rows ---
     for index, row in dataframe.iterrows():
         row_cells = table.add_row().cells
+        is_yellow_header = row.iloc[1] in ["A. Recurring Contingencies", "B. Non Recurring Contingencies"]
+        
         for i, cell_data in enumerate(row):
-            # Convert to string and handle NaN values
             text_val = str(cell_data) if pd.notna(cell_data) else ""
             row_cells[i].text = text_val
-            row_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
             
-            # Make main headers and totals bold for readability in Word
-            if text_val in ["Recurring Contingencies", "Non Recurring Contingencies", "Total - A", "Total - B", "Grand Total (A+B)"]:
+            # Left align the "Head" column, center everything else
+            if i == 1:
+                row_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+            else:
+                row_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                
+            row_cells[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            
+            # Bold the text for Category Headers and Totals
+            if is_yellow_header or text_val in ["Total - A", "Total - B", "Grand Total A+B"]:
                 row_cells[i].paragraphs[0].runs[0].bold = True
+                
+        # Apply yellow background shading to Category Rows
+        if is_yellow_header:
+            # Merge all cells in this row to look like a single divider if desired, 
+            # or just color them. Coloring all cells matches the image.
+            for cell in row_cells:
+                tcPr = cell._tc.get_or_add_tcPr()
+                shd = OxmlElement('w:shd')
+                shd.set(qn('w:val'), 'clear')
+                shd.set(qn('w:color'), 'auto')
+                shd.set(qn('w:fill'), 'FFFF00') # Hex for Yellow
+                tcPr.append(shd)
             
     # Add footer note
-    footer = doc.add_paragraph("\nIn 2025-26 State share released only in Pay and allowances")
-    footer.runs[0].italic = True
+    doc.add_paragraph() # Spacing
+    footer = doc.add_paragraph("In 2025-26 State share released only in Pay and allowances", style='List Bullet')
     
     # Save to io.BytesIO object
     bio = io.BytesIO()
@@ -1019,51 +1062,50 @@ def main():
     with tabs[4]:
         st.header("Monthly Expenditure & SOE Generation")
         
-        # --- NEW FORMATTED UI PASTED HERE ---
         st.markdown("<h3 style='text-align: center;'>Statement of Expenditure for the month of December 2025</h3>", unsafe_allow_html=True)
         st.markdown("**Name of the Centre:** Navsari")
         st.markdown("**Name of the Scheme:** AICRP/AINP on Agricultural Acarology, NAU, Navsari")
 
-        # The new 8-column layout with split ICAR/State share at the end
+        # UI columns flattened for the editor
         columns = [
             "Sr. No.", 
             "Head", 
             "Opening Balance as on 01.04.2025", 
-            "Funds Received from Council (2025-26)", 
+            "Funds Received from Council", 
             "Expenditure up to Dec 2025", 
-            "Cumulative Exp. up to 31.12.2025", 
             "75% ICAR Share", 
-            "25% State Share"
+            "25% State Share",
+            "Total"
         ]
         
-        # New Hierarchical Data Layout
+        # Hardcoded to exactly match the provided image
         data_table = [
-            ["", "Recurring Contingencies", "", "", "", "", "", ""],
-            ["1", "Establishment Charges", "(-) 1,38,340.60", "18,00,000.00", "24,74,691.00", "18,56,018.25", "18,56,018.25", "1,32,773.00"],
-            ["2", "TA", "", "", "", "", "", ""],
-            ["3", "Contingencies", "", "", "1,32,773.00", "1,32,773.00", "1,32,773.00", ""],
-            ["4", "TSP", "", "", "7,699.00", "7,699.00", "7,699.00", ""],
-            ["", "Total - A", "", "18,00,000.00", "", "", "", ""],
-            ["", "Non Recurring Contingencies", "", "", "", "", "", ""],
-            ["1", "Equipments", "", "", "", "", "", ""],
-            ["2", "Works", "", "", "", "", "", ""],
-            ["", "Total - B", "", "", "", "", "", ""],
-            ["", "Grand Total (A+B)", "", "18,00,000.00", "26,07,464.00", "19,88,791.25", "19,88,791.25", ""]
+            ["", "A. Recurring Contingencies", "", "", "", "", "", ""],
+            ["1.", "Establishment Charges", "(-) 1,38,340.60", "18,00,000.00", "24,74,691.00", "18,56,018.25", "6,18,672.75", "24,74,691.00"],
+            ["2.", "TA", "", "", "1,32,773.00", "1,32,773.00", "-", "1,32,773.00"],
+            ["3.", "Contingencies", "", "", "", "", "", ""],
+            ["4.", "TSP", "7,699.00", "-", "-", "-", "-", "-"],
+            ["", "Total - A", "--", "18,00,000.00", "", "", "", ""],
+            ["", "B. Non Recurring Contingencies", "", "", "", "", "", ""],
+            ["1.", "Equipments", "-", "-", "-", "--", "-", "-"],
+            ["2.", "Works", "-", "-", "-", "-", "-", "-"],
+            ["", "Total - B", "--", "-", "-", "--", "-", "-"],
+            ["", "Grand Total A+B", "--", "18,00,000.00", "26,07,464.00", "19,88,791.25", "6,18,672.75", "26,07,464.00"]
         ]
 
         df_soe = pd.DataFrame(data_table, columns=columns)
 
-        st.markdown("💡 **Tip: Click any cell below to edit the numbers before downloading.**")
+        st.markdown("💡 **Tip: Edit values directly in the table before downloading.**")
         
-        # Display the editable table and capture the user's edits
+        # Render the interactive editor
         edited_df = st.data_editor(df_soe, use_container_width=True, hide_index=True)
         
-        st.markdown("*In 2025-26 State share released only in Pay and allowances*")
+        st.markdown("<ul><li>In 2025-26 State share released only in Pay and allowances</li></ul>", unsafe_allow_html=True)
 
         st.divider()
         if st.button("Generate SOE Word Document", key="soe_btn_new"):
-            with st.spinner("Creating Word file..."):
-                # Pass the edited table data into the Word creator
+            with st.spinner("Creating formatted Word file..."):
+                # Pass the edited DataFrame into our Word Generator
                 soe_doc_buffer = create_word_doc(edited_df)
                 st.success("SOE Generated with your updated values!")
                 st.download_button(
@@ -1072,7 +1114,6 @@ def main():
                     file_name="SOE_December_2025.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
-
     # --- TAB 6: AI CHATBOT ---
     with tabs[5]:
         st.header("Grant Smart-Assistant")
