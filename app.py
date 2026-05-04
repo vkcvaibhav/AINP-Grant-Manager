@@ -827,7 +827,16 @@ def main():
     
     data = load_data(selected_fy)
     
-    tabs = st.tabs(["📊 Dashboard", "📤 1. Budget Intake", "💰 2. Installments (PFMS)", "📝 3. Generated Letters", "💸 4. Monthly Spend", "📄 5. SOE Generation", "🤖 AI Chatbot"])
+    tabs = st.tabs([
+        "📊 Dashboard", 
+        "📤 1. Budget Intake", 
+        "💰 2. Installments (PFMS)", 
+        "📝 3. Generated Letters", 
+        "💸 4. Monthly Spend", 
+        "📄 5. SOE Generation", 
+        "📜 6. AUC Generation",  # <-- NEW TAB ADDED
+        "🤖 AI Chatbot"
+    ])
     
     # --- TAB 1: DASHBOARD ---
     with tabs[0]:
