@@ -346,14 +346,13 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
 # ---------------------------------------------------------
 # 👇 PASTE THIS NEW FUNCTION RIGHT HERE (Around Line 240) 👇
 # ---------------------------------------------------------
-def create_word_doc(dataframe):
+def create_word_doc(dataframe, month_name, year_num, last_day):
     doc = Document()
     
-    # Set narrow margins for a wide table
+    # Set narrow margins and change orientation to LANDSCAPE (Horizontal)
     sections = doc.sections
     for section in sections:
         section.orientation = WD_ORIENTATION.LANDSCAPE
-        # Swap width and height to actually apply the landscape dimensions
         section.page_width, section.page_height = section.page_height, section.page_width
         
         section.left_margin = Inches(0.5)
@@ -361,16 +360,17 @@ def create_word_doc(dataframe):
         section.top_margin = Inches(0.5)
         section.bottom_margin = Inches(0.5)
     
-    # Headers
-    title = doc.add_paragraph("Statement of Expenditure for the month of December 2025")
+    # Headers - Dynamic Month and Year
+    title = doc.add_paragraph()
+    run_title = title.add_run(f"Statement of Expenditure for the month of {month_name} {year_num}")
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    title.runs[0].bold = True
-    title.runs[0].font.size = Pt(12)
+    run_title.bold = True
+    run_title.font.size = Pt(12)
     
     doc.add_paragraph("Name of the Centre: Navsari").runs[0].bold = True
     doc.add_paragraph("Name of the Scheme: AICRP/AINP on Agricultural Acarology, NAU, Navsari").runs[0].bold = True
     
-    # Create Table with 2 header rows to match the image's merged layout
+    # Create Table with 2 header rows
     table = doc.add_table(rows=2, cols=8)
     table.style = 'Table Grid'
     
@@ -380,9 +380,14 @@ def create_word_doc(dataframe):
     hdr0[1].text = "Head"
     hdr0[2].text = "Opening Balance\nas on 01.04.2025"
     hdr0[3].text = "Funds Received\nfrom the Council\nduring 2025-26"
-    hdr0[4].text = "Expenditure up to\nthe month of December\n2025"
-    hdr0[5].text = "Cumulative Expenditure\nup to 31.12.2025"
-    # Col 6 is merged with Col 5
+    
+    # Dynamic Headers
+    hdr0[4].text = f"Expenditure up to\nthe month of {month_name}\n{year_num}"
+    
+    # Convert month name back to a digit for the DD.MM.YYYY format
+    month_digit = list(calendar.month_name).index(month_name)
+    hdr0[5].text = f"Cumulative Expenditure\nup to {last_day}.{month_digit:02d}.{year_num}"
+    
     hdr0[7].text = "Total"
     
     # Merge "Cumulative Expenditure" across the two share columns
@@ -415,7 +420,6 @@ def create_word_doc(dataframe):
             text_val = str(cell_data) if pd.notna(cell_data) else ""
             row_cells[i].text = text_val
             
-            # Left align the "Head" column, center everything else
             if i == 1:
                 row_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
             else:
@@ -423,27 +427,23 @@ def create_word_doc(dataframe):
                 
             row_cells[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
             
-            # Bold the text for Category Headers and Totals
             if is_yellow_header or text_val in ["Total - A", "Total - B", "Grand Total A+B"]:
                 row_cells[i].paragraphs[0].runs[0].bold = True
                 
-        # Apply yellow background shading to Category Rows
+        # Apply yellow background shading
         if is_yellow_header:
-            # Merge all cells in this row to look like a single divider if desired, 
-            # or just color them. Coloring all cells matches the image.
             for cell in row_cells:
                 tcPr = cell._tc.get_or_add_tcPr()
                 shd = OxmlElement('w:shd')
                 shd.set(qn('w:val'), 'clear')
                 shd.set(qn('w:color'), 'auto')
-                shd.set(qn('w:fill'), 'FFFF00') # Hex for Yellow
+                shd.set(qn('w:fill'), 'FFFF00')
                 tcPr.append(shd)
             
     # Add footer note
-    doc.add_paragraph() # Spacing
+    doc.add_paragraph() 
     footer = doc.add_paragraph("In 2025-26 State share released only in Pay and allowances", style='List Bullet')
     
-    # Save to io.BytesIO object
     bio = io.BytesIO()
     doc.save(bio)
     bio.seek(0)
@@ -1154,57 +1154,138 @@ def main():
     with tabs[5]:
         st.header("Statement of Expenditure (SOE) Generation")
         
-        st.markdown("<h3 style='text-align: center;'>Statement of Expenditure for the month of December 2025</h3>", unsafe_allow_html=True)
+        # 1. Custom function to format numbers as Indian Rupees (e.g., 24,74,691.00)
+        def format_inr(number):
+            if number == 0: return "-"
+            is_neg = number < 0
+            num_abs = abs(number)
+            s, *d = str(f"{num_abs:.2f}").partition(".")
+            r = ",".join([s[x-2:x] for x in range(-3, -len(s), -2)][::-1] + [s[-3:]]) if len(s) > 3 else s
+            val = f"{r}{d[0]}{d[1]}"
+            return f"(-) {val}" if is_neg else val
+
+        # 2. Controls for Date Selection
+        col_m, col_y = st.columns(2)
+        today = date.today()
+        soe_month = col_m.selectbox("Select SOE Month", [datetime(2000, m, 1).strftime('%B') for m in range(1, 13)], index=today.month-1, key="soe_m")
+        soe_year = col_y.number_input("Select SOE Year", value=today.year, min_value=2024, max_value=2030, key="soe_y")
+        
+        # Calculate last day of the selected month
+        month_idx = list(calendar.month_name).index(soe_month)
+        last_day = calendar.monthrange(soe_year, month_idx)[1]
+        end_date = datetime(soe_year, month_idx, last_day)
+
+        # 3. Setup Opening Balances Dictionary
+        if 'opening_balances' not in data:
+            data['opening_balances'] = {
+                "Establishment Charges": 0.0, "TA": 0.0, "Contingencies": 0.0, 
+                "TSP": 0.0, "Equipments": 0.0, "Works": 0.0
+            }
+            
+        with st.expander(f"⚙️ Set Opening Balances for FY {selected_fy}"):
+            st.write("Save the opening balances carried forward from the previous year. This stays saved for the whole Financial Year.")
+            with st.form("ob_form"):
+                cols = st.columns(3)
+                new_obs = {}
+                for idx, (k, v) in enumerate(data['opening_balances'].items()):
+                    new_obs[k] = cols[idx % 3].number_input(f"{k} (₹)", value=float(v), step=1000.0)
+                if st.form_submit_button("💾 Save Opening Balances"):
+                    data['opening_balances'] = new_obs
+                    save_data(data, selected_fy)
+                    st.success("Opening Balances Saved!")
+
+        st.divider()
+        st.markdown(f"<h3 style='text-align: center;'>Statement of Expenditure for the month of {soe_month} {soe_year}</h3>", unsafe_allow_html=True)
         st.markdown("**Name of the Centre:** Navsari")
         st.markdown("**Name of the Scheme:** AICRP/AINP on Agricultural Acarology, NAU, Navsari")
 
-        # UI columns flattened for the editor
+        # 4. Data Gathering & Mapping Logic
+        # Mapping standard Installment Budget Heads to SOE Sub-Heads
+        inst_to_soe_map = {
+            "Pay and Allowances": "Establishment Charges",
+            "Travelling Allowances (TA)": "TA",
+            "Other Recurring Contingencies (ORC)": "Contingencies",
+            "TSP": "TSP",
+            "Non-Recurring Contingencies (Equipments/Works)": "Equipments" # Pushed to Equipments as requested
+        }
+
+        ob = data['opening_balances']
+        funds = {k: 0.0 for k in ob.keys()}
+        exp = {k: 0.0 for k in ob.keys()}
+
+        # Cumulative Funds Received
+        for inst in data.get('installments', []):
+            inst_date = datetime.strptime(inst['date'], "%Y-%m-%d")
+            if inst_date <= end_date:
+                for h_name, amt in inst.get('heads', {}).items():
+                    soe_head = inst_to_soe_map.get(h_name)
+                    if soe_head:
+                        funds[soe_head] += float(amt)
+
+        # Cumulative Expenditure
+        for e in data.get('expenditure', []):
+            e_date = datetime.strptime(e['date'], "%Y-%m-%d")
+            if e_date <= end_date:
+                sub_head = e.get('sub_head')
+                if sub_head in exp:
+                    exp[sub_head] += float(e.get('amount', 0.0))
+
+        # 5. Build the Data Table Array
+        data_table = []
+        data_table.append(["", "A. Recurring Contingencies", "", "", "", "", "", ""])
+
+        # Calculate A
+        rec_heads = [("1.", "Establishment Charges"), ("2.", "TA"), ("3.", "Contingencies"), ("4.", "TSP")]
+        tot_A = [0.0]*5 # [OB, Funds, Exp, ICAR, State]
+        for sr, head in rec_heads:
+            o = ob[head]; f = funds[head]; e = exp[head]
+            i = e * 1.0 if head == "TSP" else e * 0.75
+            s = 0.0 if head == "TSP" else e * 0.25
+            data_table.append([sr, head, format_inr(o), format_inr(f), format_inr(e), format_inr(i), format_inr(s), format_inr(e)])
+            tot_A[0] += o; tot_A[1] += f; tot_A[2] += e; tot_A[3] += i; tot_A[4] += s
+
+        data_table.append(["", "Total - A", format_inr(tot_A[0]), format_inr(tot_A[1]), format_inr(tot_A[2]), format_inr(tot_A[3]), format_inr(tot_A[4]), format_inr(tot_A[2])])
+        data_table.append(["", "B. Non Recurring Contingencies", "", "", "", "", "", ""])
+
+        # Calculate B
+        non_rec_heads = [("1.", "Equipments"), ("2.", "Works")]
+        tot_B = [0.0]*5
+        for sr, head in non_rec_heads:
+            o = ob[head]; f = funds[head]; e = exp[head]
+            i = e * 0.75
+            s = e * 0.25
+            data_table.append([sr, head, format_inr(o), format_inr(f), format_inr(e), format_inr(i), format_inr(s), format_inr(e)])
+            tot_B[0] += o; tot_B[1] += f; tot_B[2] += e; tot_B[3] += i; tot_B[4] += s
+
+        data_table.append(["", "Total - B", format_inr(tot_B[0]), format_inr(tot_B[1]), format_inr(tot_B[2]), format_inr(tot_B[3]), format_inr(tot_B[4]), format_inr(tot_B[2])])
+
+        # Grand Total
+        g_tot = [tot_A[j] + tot_B[j] for j in range(5)]
+        data_table.append(["", "Grand Total A+B", format_inr(g_tot[0]), format_inr(g_tot[1]), format_inr(g_tot[2]), format_inr(g_tot[3]), format_inr(g_tot[4]), format_inr(g_tot[2])])
+
+        # 6. Render Data
         columns = [
-            "Sr. No.", 
-            "Head", 
-            "Opening Balance as on 01.04.2025", 
-            "Funds Received from Council", 
-            "Expenditure up to Dec 2025", 
-            "75% ICAR Share", 
-            "25% State Share",
-            "Total"
+            "Sr. No.", "Head", "Opening Balance as on 01.04.2025", f"Funds Received from Council", 
+            f"Expenditure up to {soe_month} {soe_year}", "75% ICAR Share", "25% State Share", "Total"
         ]
         
-        # Hardcoded to exactly match the provided image
-        data_table = [
-            ["", "A. Recurring Contingencies", "", "", "", "", "", ""],
-            ["1.", "Establishment Charges", "(-) 1,38,340.60", "18,00,000.00", "24,74,691.00", "18,56,018.25", "6,18,672.75", "24,74,691.00"],
-            ["2.", "TA", "", "", "1,32,773.00", "1,32,773.00", "-", "1,32,773.00"],
-            ["3.", "Contingencies", "", "", "", "", "", ""],
-            ["4.", "TSP", "7,699.00", "-", "-", "-", "-", "-"],
-            ["", "Total - A", "--", "18,00,000.00", "", "", "", ""],
-            ["", "B. Non Recurring Contingencies", "", "", "", "", "", ""],
-            ["1.", "Equipments", "-", "-", "-", "--", "-", "-"],
-            ["2.", "Works", "-", "-", "-", "-", "-", "-"],
-            ["", "Total - B", "--", "-", "-", "--", "-", "-"],
-            ["", "Grand Total A+B", "--", "18,00,000.00", "26,07,464.00", "19,88,791.25", "6,18,672.75", "26,07,464.00"]
-        ]
-
         df_soe = pd.DataFrame(data_table, columns=columns)
 
-        st.markdown("💡 **Tip: Edit values directly in the table before downloading.**")
-        
-        # Render the interactive editor
+        st.markdown("💡 **Tip: Your SOE is now calculated automatically. You can still click to edit values if needed before downloading.**")
         edited_df = st.data_editor(df_soe, use_container_width=True, hide_index=True)
-        
         st.markdown("<ul><li>In 2025-26 State share released only in Pay and allowances</li></ul>", unsafe_allow_html=True)
 
         st.divider()
         if st.button("Generate SOE Word Document", key="soe_btn_new"):
             with st.spinner("Creating formatted Word file..."):
-                # Pass the edited DataFrame into our Word Generator
-                soe_doc_buffer = create_word_doc(edited_df)
-                st.success("SOE Generated with your updated values!")
+                soe_doc_buffer = create_word_doc(edited_df, soe_month, soe_year, last_day)
+                st.success("SOE Generated with dynamic dates and calculations!")
                 st.download_button(
                     label="📥 Download SOE Word File",
                     data=soe_doc_buffer,
-                    file_name="SOE_December_2025.docx",
+                    file_name=f"SOE_{soe_month}_{soe_year}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
                 )
 
     # --- TAB 7: AI CHATBOT ---
