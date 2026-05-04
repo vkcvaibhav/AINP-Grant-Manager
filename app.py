@@ -140,128 +140,17 @@ def process_upload_with_ai(uploaded_file, prompt_task):
 # --- C. Output Generation (PDF/WORD) ---
 
 class GujaratiPDF(FPDF):
-    def header(self):
-        if ICAR_LOGO:
-            self.image(ICAR_LOGO, 180, 8, 20)
-        if NAU_LOGO:
-            self.image(NAU_LOGO, 180, 8, 20)
-        
-        self.add_font('Gujarati', '', GUJARATI_FONT, uni=True)
-        self.set_font('Gujarati', '', 12)
-        
-        self.cell(0, 5, 'કીટકશાસ્ત્ર વિભાગ', ln=True, align='C')
-        self.cell(0, 5, 'ન. મ. કૃષિ મહાવિદ્યાલય', ln=True, align='C')
-        self.cell(0, 5, 'નવસારી કૃષિ યુનિવર્સિટી', ln=True, align='C')
-        self.cell(0, 5, 'નવસારી- ૩૯૬ ૪૫૦ (ગુજરાત)', ln=True, align='C')
-        self.ln(10)
-
-def generate_comptroller_letter(data, installment):
-    if not os.path.exists(GUJARATI_FONT):
-        st.error(f"Gujarati font not found at {GUJARATI_FONT}. Cannot generate letter.")
-        return None
-
-    today_str = datetime.now().strftime("%d/%m/%Y")
-    
-    pdf = GujaratiPDF(orientation='P', unit='mm', format='A4')
-    pdf.add_page()
-    
-    pdf.cell(0, 10, f'જા.નં. એસીએન/એન્ટો/Grant/{installment["type"]}/2026, નવસારી', ln=False)
-    pdf.cell(0, 10, f'તારીખ: {today_str}', ln=True, align='R')
-    pdf.ln(5)
-    
-    pdf.cell(0, 7, 'પ્રતિ,', ln=True)
-    pdf.cell(0, 7, 'હિસાબ નિયામકશ્રી', ln=True)
-    pdf.cell(0, 7, 'નવસારી કૃષિ યુનિવર્સિટી, નવસારી', ln=True)
-    pdf.ln(3)
-    
-    pdf.cell(0, 7, 'મારફત સવિનય: આચાર્ય અને ડિનશ્રી, ન. મ. કૃષિ મહાવિદ્યાલય, ન.કૃ.યુ., નવસારી ૩૯૬ ૪૫૦', ln=True)
-    pdf.ln(5)
-
-    subj = f"વિષય:- ICAR – NCIPM તરફથી આવેલ AINP Acrology Grant ({installment['type']}) ફાળવવા બાબત..."
-    pdf.set_font('Gujarati', '', 12)
-    pdf.multi_cell(0, 7, subj, 0, 'J')
-    pdf.ln(5)
-
-    body = f"""જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે ચાલતી આઈ.સી.એ.આર. યોજના AINP on Agricultural Acarology (75:25%) માં આવેલ ગ્રાન્ટ રૂ. {installment['amount']:,}/- (PFMS ID: {installment['pfms_id']}) ને કોષ્ટકમાં જણાવ્યાનુસાર ફાળવી આપવા આપ સાહેબશ્રીને નમ્ર વિનંતી."""
-    pdf.multi_cell(0, 7, body, 0, 'J')
-    pdf.ln(5)
-
-    pdf.set_font('Helvetica', 'B', 10) 
-    cols = [60, 40, 40, 40]
-    pdf.cell(cols[0], 7, 'Head', 1, 0, 'C')
-    pdf.cell(cols[1], 7, 'Pay', 1, 0, 'C')
-    pdf.cell(cols[2], 7, 'Recurring', 1, 0, 'C')
-    pdf.cell(cols[3], 7, 'Total Amount', 1, 1, 'C')
-    
-    pdf.set_font('Helvetica', '', 10)
-    pdf.cell(cols[0], 7, 'AINP Acarology', 1, 0, 'L')
-    pdf.cell(cols[1], 7, '-', 1, 0, 'C')
-    pdf.cell(cols[2], 7, '-', 1, 0, 'C')
-    pdf.cell(cols[3], 7, f'{installment["amount"]:,}/-', 1, 1, 'R')
-    pdf.ln(10)
-
-    pdf.set_font('Gujarati', '', 12)
-    pdf.cell(0, 7, 'પ્રોજેક્ટ ઈન્ચાર્જ                                                                                                                     પ્રાધ્યાપક અને વડા', ln=True)
-
-    letter_filename = f"documents/Letter_Comptroller_{installment['pfms_id']}.pdf"
-    pdf.output(letter_filename)
-    
-    with open(letter_filename, "rb") as f:
-        pdf_bytes = f.read()
-    return pdf_bytes
-
-def generate_soe_word(data, month, year):
-    doc = Document()
-    
-    title = doc.add_paragraph('Statement of Expenditure for the month of ')
-    title.add_run(f'{month} {year}').bold = True
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    
-    details = doc.add_paragraph()
-    details.add_run('Name of the Centre: ').bold = True
-    details.add_run('Navsari\n')
-    details.add_run('Name of the Scheme: ').bold = True
-    details.add_run('AICRP/AINP on Agricultural Acarology, NAU, Navsari')
-    details.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    table = doc.add_table(rows=2, cols=9)
-    table.style = 'Table Grid'
-    
-    hdr_cells = table.rows[0].cells
-    hdr_cells[0].text = 'Sr. No.'
-    hdr_cells[1].text = 'Head'
-    hdr_cells[2].text = 'Opening Balance as on 01.04'
-    hdr_cells[3].text = 'Funds Received during Year'
-    hdr_cells[4].text = f'Expenditure up to month of {month}'
-    hdr_cells[5].text = 'Cumulative Expenditure'
-    
-    row_cells = table.add_row().cells
-    row_cells[0].text = '1'
-    row_cells[1].text = BUDGET_HEADS[0]
-    row_cells[2].text = '-1,38,340' 
-    
-    doc_io = io.BytesIO()
-    doc.save(doc_io)
-    doc_io.seek(0)
-    return doc_io
-
-def add_thick_bottom_border(paragraph):
-    """Adds a thick black bottom border to a paragraph to act as a proper separator line."""
+    def add_bottom_border(paragraph, size='24'):
+    """Adds a bottom border to a paragraph. Size '24' is a thick 3pt line, '8' is a thin 1pt line."""
     p = paragraph._p
     pPr = p.get_or_add_pPr()
-    pBdr = OxmlElement('w:pBdr')
-    pPr.insert_element_before(pBdr,
-        'w:shd', 'w:tabs', 'w:suppressAutoHyphens', 'w:kinsoku', 'w:wordWrap',
-        'w:overflowPunct', 'w:topLinePunct', 'w:autoSpaceDE', 'w:autoSpaceDN',
-        'w:bidi', 'w:adjustRightInd', 'w:snapToGrid', 'w:spacing', 'w:ind',
-        'w:contextualSpacing', 'w:mirrorIndents', 'w:suppressOverlap', 'w:jc',
-        'w:textDirection', 'w:textAlignment', 'w:textboxTightWrap',
-        'w:outlineLvl', 'w:divId', 'w:cnfStyle', 'w:rPr', 'w:sectPr',
-        'w:pPrChange'
-    )
+    pBdr = pPr.find(qn('w:pBdr'))
+    if pBdr is None:
+        pBdr = OxmlElement('w:pBdr')
+        pPr.append(pBdr)
     bottom = OxmlElement('w:bottom')
     bottom.set(qn('w:val'), 'single')
-    bottom.set(qn('w:sz'), '18')  # 18 eighths of a point = 2.25 pt (thick dark line)
+    bottom.set(qn('w:sz'), size) 
     bottom.set(qn('w:space'), '1')
     bottom.set(qn('w:color'), '000000')
     pBdr.append(bottom)
@@ -270,124 +159,126 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
     """Generates the Native Microsoft Word format for the Comptroller Letter matching the exact layout."""
     doc = Document()
     
-    # Set document margins
+    # Set document margins tight to match letterhead
     for section in doc.sections:
-        section.top_margin = Inches(0.5)
+        section.top_margin = Inches(0.4)
         section.bottom_margin = Inches(0.5)
-        section.left_margin = Inches(1.0)
-        section.right_margin = Inches(1.0)
+        section.left_margin = Inches(0.8)
+        section.right_margin = Inches(0.8)
+        
+    # Strip default spacing to ensure tables pack tightly together
+    style = doc.styles['Normal']
+    style.font.size = Pt(12)
+    style.paragraph_format.space_after = Pt(0)
+    style.paragraph_format.space_before = Pt(0)
         
     # 1. Header Table for Logos and Center Text
     table = doc.add_table(rows=1, cols=3)
     table.autofit = False
-    table.columns[0].width = Inches(1.2)
-    table.columns[1].width = Inches(4.0)
-    table.columns[2].width = Inches(1.2)
+    table.columns[0].width = Inches(1.8)
+    table.columns[1].width = Inches(3.6)
+    table.columns[2].width = Inches(1.4)
     
     # Left Logo (NAU)
     if 'NAU_LOGO' in globals() and NAU_LOGO and os.path.exists(NAU_LOGO):
         p_left = table.cell(0, 0).paragraphs[0]
         p_left.alignment = WD_ALIGN_PARAGRAPH.CENTER
         r_left = p_left.add_run()
-        r_left.add_picture(NAU_LOGO, width=Inches(1.1)) # Adjusted for proper size
+        r_left.add_picture(NAU_LOGO, width=Inches(1.8))
         
     # Center Text
     p_center = table.cell(0, 1).paragraphs[0]
     p_center.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_center.paragraph_format.line_spacing = 1.0 # Keep lines tightly packed
     
     r1 = p_center.add_run("કીટકશાસ્ત્ર વિભાગ\n")
     r1.bold = True
-    r1.font.size = Pt(16)
+    r1.font.size = Pt(22) # Large, prominent heading
     
     r2 = p_center.add_run("ન. મ. કૃષિ મહાવિદ્યાલય\nનવસારી કૃષિ યુનિવર્સિટી\nનવસારી- ૩૯૬ ૪૫૦ (ગુજરાત)")
     r2.bold = True
-    r2.font.size = Pt(13)
+    r2.font.size = Pt(14)
     
     # Right Logo (ICAR)
     if 'ICAR_LOGO' in globals() and ICAR_LOGO and os.path.exists(ICAR_LOGO):
         p_right = table.cell(0, 2).paragraphs[0]
         p_right.alignment = WD_ALIGN_PARAGRAPH.CENTER
         r_right = p_right.add_run()
-        r_right.add_picture(ICAR_LOGO, width=Inches(1.1)) # Adjusted for proper size
+        r_right.add_picture(ICAR_LOGO, width=Inches(1.2))
         
-    # 2. True Dark Black Separator Line
-    line_para = doc.add_paragraph()
-    add_thick_bottom_border(line_para)
+    # Draw Thick Black Separator Line
+    p_thick = doc.add_paragraph()
+    add_bottom_border(p_thick, size='24')
     
-    # Add minor spacing after the line
-    doc.add_paragraph().paragraph_format.space_after = Pt(2)
-    
-    # 3. Sender Info Block
+    # 2. Sender Info Block
     table2 = doc.add_table(rows=1, cols=2)
     table2.autofit = False
-    table2.columns[0].width = Inches(3.2)
-    table2.columns[1].width = Inches(3.2)
+    table2.columns[0].width = Inches(3.4)
+    table2.columns[1].width = Inches(3.4)
     
     p1 = table2.cell(0,0).paragraphs[0]
-    run_name = p1.add_run("ડૉ. જે. જે. પસ્તાગિયા\n")
-    run_name.bold = True
-    run_name.font.size = Pt(12)
-    run_title = p1.add_run("પ્રાધ્યાપક અને વડા (ઈ/ચા.)")
-    run_title.font.size = Pt(12)
+    p1.add_run("ડૉ. જે. જે. પસ્તાગિયા\nપ્રાધ્યાપક અને વડા (ઈ/ચા.)")
     
     p2 = table2.cell(0,1).paragraphs[0]
     p2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    run_contact = p2.add_run("મોબાઇલ: +૯૧ ૯૮૭૯૦ ૩૮૫૩૯\nઇમેલ: headentonau@gmail.com")
-    run_contact.font.size = Pt(11)
+    p2.add_run("મોબાઇલ: +૯૧ ૯૮૭૯૦ ૩૮૫૩૯\nઇમેલ: headentonau@gmail.com")
     
-    doc.add_paragraph().paragraph_format.space_after = Pt(2)
+    # Ensure inner paragraphs of table2 have zero spacing
+    for cell in table2.rows[0].cells:
+        for p in cell.paragraphs:
+            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.space_before = Pt(0)
     
-    # 4. Reference No & Date
+    # Draw Thin Black Separator Line
+    p_thin = doc.add_paragraph()
+    add_bottom_border(p_thin, size='8') 
+    
+    # 3. Reference No & Date
     table3 = doc.add_table(rows=1, cols=2)
     table3.autofit = False
-    table3.columns[0].width = Inches(4.0)
-    table3.columns[1].width = Inches(2.4)
+    table3.columns[0].width = Inches(4.5)
+    table3.columns[1].width = Inches(2.3)
     
     p_ref = table3.cell(0,0).paragraphs[0]
-    run_ref = p_ref.add_run(f"જા.નં. એસીએન/એન્ટો/{ref_no}/૨૦૨૬, નવસારી")
-    run_ref.font.size = Pt(12)
+    p_ref.add_run(f"જા.નં. એસીએન/એન્ટો/{ref_no}/૨૦૨૬, નવસારી")
     
     p_date = table3.cell(0,1).paragraphs[0]
     p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    run_date = p_date.add_run(f"તારીખ: {letter_date}")
-    run_date.font.size = Pt(12)
+    p_date.add_run(f"તારીખ: {letter_date}")
     
-    doc.add_paragraph().paragraph_format.space_after = Pt(2)
+    for cell in table3.rows[0].cells:
+        for p in cell.paragraphs:
+            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.space_before = Pt(0)
+            
+    # Add a buffer space before the main letter body
+    doc.add_paragraph().paragraph_format.space_after = Pt(6)
     
-    # 5. Recipient
+    # 4. Recipient
     p_to = doc.add_paragraph()
-    p_to.paragraph_format.space_after = Pt(2)
-    run_to_title = p_to.add_run("પ્રતિ,\n")
-    run_to_title.font.size = Pt(12)
-    run_to_body = p_to.add_run("હિસાબ નિયામકશ્રી\nનવસારી કૃષિ યુનિવર્સિટી\nનવસારી- ૩૯૬ ૪૫૦")
-    run_to_body.font.size = Pt(12)
+    p_to.add_run("પ્રતિ,\n").bold = True
+    p_to.add_run("હિસાબ નિયામકશ્રી\nનવસારી કૃષિ યુનિવર્સિટી\nનવસારી- ૩૯૬ ૪૫૦")
+    p_to.paragraph_format.space_after = Pt(6)
     
-    # 6. Through
+    # 5. Through
     p_through = doc.add_paragraph()
+    p_through.add_run("મારફત સવિનય: ").bold = True
+    p_through.add_run("આચાર્ય અને ડિનશ્રી , ન. મ. કૃષિ મહાવિદ્યાલય, ન.કૃ.યુ., નવસારી ૩૯૬ ૪૫૦")
     p_through.paragraph_format.space_after = Pt(6)
-    r_through_label = p_through.add_run("મારફત સવિનય: ")
-    r_through_label.bold = True
-    r_through_label.font.size = Pt(12)
-    r_through_val = p_through.add_run("આચાર્ય અને ડિનશ્રી , ન. મ. કૃષિ મહાવિદ્યાલય, ન.કૃ.યુ., નવસારી ૩૯૬ ૪૫૦")
-    r_through_val.font.size = Pt(12)
     
-    # 7. Subject
+    # 6. Subject
     p_sub = doc.add_paragraph()
-    p_sub.paragraph_format.space_after = Pt(6)
-    r_sub_label = p_sub.add_run("વિષય:- ")
-    r_sub_label.bold = True
-    r_sub_label.font.size = Pt(12)
-    r_sub_val = p_sub.add_run("બ.સ. ૩૦૩/ ૨૦૯૨ અને ૩૦૩/ ૨૦૯૨/A માં ICAR – NCIPM તરફથી આવેલ ગ્રાન્ટ ફાળવવા બાબત...")
-    r_sub_val.bold = True
-    r_sub_val.font.size = Pt(12)
+    p_sub.add_run("વિષય:- ").bold = True
+    p_sub.add_run("બ.સ. ૩૦૩/ ૨૦૯૨ અને ૩૦૩/ ૨૦૯૨/A માં ICAR – NCIPM તરફથી આવેલ ગ્રાન્ટ ફાળવવા બાબત...")
+    p_sub.paragraph_format.space_after = Pt(12)
     
-    # 8. Body Text
-    p_body = doc.add_paragraph()
+    # 7. Body Text (With Official Letter Indentation)
+    p_body = doc.add_paragraph(body_text)
     p_body.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    r_body = p_body.add_run(body_text)
-    r_body.font.size = Pt(12)
+    p_body.paragraph_format.first_line_indent = Inches(0.5) 
+    p_body.paragraph_format.space_after = Pt(12)
     
-    # 9. Finance Table
+    # 8. Finance Table
     table4 = doc.add_table(rows=2, cols=5)
     table4.style = 'Table Grid'
     headers = ["Name of Centre (Scheme)", "Pay And allowance", "Recurring Contingencies", "Non-Recurring Contingencies", "Total Amount"]
@@ -396,7 +287,6 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
         p = table4.cell(0, i).paragraphs[0]
         r_h = p.add_run(h)
         r_h.bold = True
-        r_h.font.size = Pt(11)
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
     table4.cell(1, 0).text = "AINP on Agril Acarology\n(BH.303/2092)"
@@ -407,38 +297,29 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
     
     for i in range(5):
         table4.cell(1, i).paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        for run in table4.cell(1, i).paragraphs[0].runs:
-            run.font.size = Pt(11)
-            
-    doc.add_paragraph()
+        
+    doc.add_paragraph().paragraph_format.space_after = Pt(6)
     
-    # 10. Footer Amount & Enclosure
+    # 9. Footer Amount & Enclosure
     p_amt = doc.add_paragraph()
-    r_amt = p_amt.add_run(f"In Rupees: {amt_words}")
-    r_amt.font.size = Pt(12)
-    r_amt.bold = True
+    p_amt.add_run(f"In Rupees: {amt_words}").bold = True
+    p_amt.paragraph_format.space_after = Pt(12)
     
-    p_enc = doc.add_paragraph()
-    r_enc = p_enc.add_run("સામેલ: ઉપર મુજબ")
-    r_enc.font.size = Pt(12)
-    doc.add_paragraph()
+    p_enc = doc.add_paragraph("સામેલ: ઉપર મુજબ")
+    p_enc.paragraph_format.space_after = Pt(24)
     
-    # 11. Signatures
+    # 10. Signatures
     table5 = doc.add_table(rows=1, cols=2)
     table5.autofit = False
-    table5.columns[0].width = Inches(3.2)
-    table5.columns[1].width = Inches(3.2)
+    table5.columns[0].width = Inches(3.4)
+    table5.columns[1].width = Inches(3.4)
     
     p_sig_left = table5.cell(0,0).paragraphs[0]
-    r_sig1 = p_sig_left.add_run("પ્રોજેક્ટ ઈન્ચાર્જ")
-    r_sig1.bold = True
-    r_sig1.font.size = Pt(12)
+    p_sig_left.add_run("પ્રોજેક્ટ ઈન્ચાર્જ").bold = True
     
     p_sig_right = table5.cell(0,1).paragraphs[0]
     p_sig_right.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    r_sig2 = p_sig_right.add_run("પ્રાધ્યાપક અને વડા")
-    r_sig2.bold = True
-    r_sig2.font.size = Pt(12)
+    p_sig_right.add_run("પ્રાધ્યાપક અને વડા").bold = True
     
     doc_io = io.BytesIO()
     doc.save(doc_io)
