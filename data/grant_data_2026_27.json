@@ -77,6 +77,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Farm labour- Naginkaka 16 to 30/4/2026",
             "amount": 7452.0
+        },
+        {
+            "date": "2026-04-08",
+            "head": "Pay and Allowances",
+            "detail": "ok",
+            "amount": 20000.0
         }
     ],
     "latest_quarter": "Q4 Release",
