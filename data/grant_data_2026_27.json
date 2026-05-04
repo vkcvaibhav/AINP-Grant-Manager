@@ -89,6 +89,12 @@
             "head": "Travelling Allowances (TA)",
             "detail": "",
             "amount": 250000.0
+        },
+        {
+            "date": "2026-04-22",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "",
+            "amount": 30000.0
         }
     ],
     "latest_quarter": "Q4 Release",
