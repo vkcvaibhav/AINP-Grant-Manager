@@ -157,9 +157,9 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
     """Generates the Native Microsoft Word format for the Comptroller Letter matching the exact layout."""
     doc = Document()
     
-    # Set document margins tight to match letterhead
+    # Reduced top_margin drastically to remove the space at the top of the page
     for section in doc.sections:
-        section.top_margin = Inches(0.4)
+        section.top_margin = Inches(0.25) 
         section.bottom_margin = Inches(0.5)
         section.left_margin = Inches(0.8)
         section.right_margin = Inches(0.8)
@@ -176,6 +176,11 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
     table.columns[0].width = Inches(1.8)
     table.columns[1].width = Inches(3.6)
     table.columns[2].width = Inches(1.4)
+
+    # VERTICAL ALIGNMENT: Force all 3 cells in the header to align to the middle vertically
+    table.cell(0, 0).vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    table.cell(0, 1).vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    table.cell(0, 2).vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
     
     # Left Logo (NAU)
     if 'NAU_LOGO' in globals() and NAU_LOGO and os.path.exists(NAU_LOGO):
@@ -187,7 +192,12 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
     # Center Text
     p_center = table.cell(0, 1).paragraphs[0]
     p_center.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_center.paragraph_format.line_spacing = 1.0 # Keep lines tightly packed
+    
+    # Apply strict line spacing to squeeze the text lines together
+    p_center.paragraph_format.space_before = Pt(0)
+    p_center.paragraph_format.space_after = Pt(0)
+    p_center.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+    p_center.paragraph_format.line_spacing = 0.85 # <--- Squeezes the lines together 
     
     r1 = p_center.add_run("કીટકશાસ્ત્ર વિભાગ\n")
     r1.bold = True
