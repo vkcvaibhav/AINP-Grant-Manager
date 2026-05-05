@@ -2415,7 +2415,7 @@ def main():
                     fw_doc = generate_auc_forwarding_docx(ref_no, letter_date, subj, body)
                     st.download_button("Download Forwarding Letter (.docx)", data=fw_doc, file_name=f"AUC_Forwarding_Letter_{selected_fy}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key="auc_final_dl_btn")
 
-   # --- TAB 7: AI CHATBOT ---
+# --- TAB 7: AI CHATBOT ---
     with tabs[7]:
         st.header("🧠 Advanced Grant Assistant & Report Generator")
         st.write("Ask questions about your grant, or **upload University guidelines, Excel data, or PDFs** to extract information and automatically generate reports.")
@@ -2469,7 +2469,7 @@ def main():
                 
                 with st.spinner("Analyzing data and generating response..."):
                     try:
-                        # --- FIX: Give Gemini true conversational memory ---
+                        # --- Give Gemini true conversational memory ---
                         gemini_history = []
                         for msg in st.session_state.messages[:-1]: # Exclude the current prompt
                             role = "model" if msg["role"] == "assistant" else "user"
