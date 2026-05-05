@@ -628,7 +628,7 @@ def create_annual_word_doc(dataframe, fy_string):
     bio.seek(0)
     return bio
 # ---------------------------------------------------------
-# 👇 REPLACE YOUR CURRENT `generate_auc_forwarding_docx` FUNCTION
+# 👇 REPLACE YOUR CURRENT `generate_auc_forwarding_docx` FUNCTION 👇
 # ---------------------------------------------------------
 def generate_auc_forwarding_docx(ref_no, letter_date, subject_text, body_text):
     """Generates the Forwarding Letter specifically for the AUC."""
@@ -674,7 +674,6 @@ def generate_auc_forwarding_docx(ref_no, letter_date, subject_text, body_text):
         r_right = p_right.add_run()
         r_right.add_picture(ICAR_LOGO, width=Inches(1.5))
         
-    # --- FIX: Squashed First Thick Black Separator Line ---
     p_thick1 = doc.add_paragraph()
     p_thick1.paragraph_format.space_before = Pt(0)
     p_thick1.paragraph_format.space_after = Pt(0)
@@ -689,19 +688,17 @@ def generate_auc_forwarding_docx(ref_no, letter_date, subject_text, body_text):
     table2.columns[1].width = Inches(3.4)
 
     p1 = table2.cell(0,0).paragraphs[0]
-    p1.add_run("ડૉ. જે. જે. પસ્તાગિયા\nપ્રાધ્યાપક અને વડા (ઈ/ચા.)")
+    p1.add_run("ડૉ. સચિન ડી. પટેલ\nપ્રાધ્યાપક અને વડા")
     p2 = table2.cell(0,1).paragraphs[0]
     p2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    p2.add_run("મોબાઇલ: +૯૧ ૯૮૭૯૦ ૩૮૫૩૯\nઇમેલ: headentonau@gmail.com")
+    p2.add_run("મોબાઇલ: +૯૧ ૯૪૨૭૮ ૬૭૯૨૫\nઇમેલ: headentonau@gmail.com")
     
-    # --- FIX: Ensure inner paragraphs of table2 have zero spacing ---
     for cell in table2.rows[0].cells:
         for p in cell.paragraphs:
             p.paragraph_format.space_after = Pt(0)
             p.paragraph_format.space_before = Pt(0)
-            p.paragraph_format.line_spacing = 0.8  # This squashes the \n gap
+            p.paragraph_format.line_spacing = 0.8
             
-    # --- FIX: Squashed Second Thick Black Separator Line ---
     p_thick2 = doc.add_paragraph()
     p_thick2.paragraph_format.space_before = Pt(0)
     p_thick2.paragraph_format.space_after = Pt(0)
@@ -710,9 +707,12 @@ def generate_auc_forwarding_docx(ref_no, letter_date, subject_text, body_text):
     p_thick2.add_run().font.size = Pt(1) 
     add_bottom_border(p_thick2, size='24')
     
+    # Dynamically grab the year from the date for the ref no
+    letter_year = letter_date.split('/')[-1] if '/' in letter_date else "૨૦૨૬"
+    
     table3 = doc.add_table(rows=1, cols=2)
     p_ref = table3.cell(0,0).paragraphs[0]
-    p_ref.add_run(f"જા.નં. એસીએન/એન્ટો/{ref_no}/૨૦૨૬, નવસારી")
+    p_ref.add_run(f"જા.નં. એસીએન/એન્ટો/એઆઈએનપી-એએ/{ref_no}/{letter_year}, નવસારી")
     p_date = table3.cell(0,1).paragraphs[0]
     p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p_date.add_run(f"તારીખ: {letter_date}")
@@ -721,12 +721,12 @@ def generate_auc_forwarding_docx(ref_no, letter_date, subject_text, body_text):
     
     p_to = doc.add_paragraph()
     p_to.add_run("પ્રતિ,\n").bold = True
-    p_to.add_run("હિસાબ નિયામકશ્રી\nનવસારી કૃષિ યુનિવર્સિટી\nનવસારી- ૩૯૬ ૪૫૦")
+    p_to.add_run("હિસાબ નિયામકશ્રી,\nનવસારી કૃષિ યુનિવર્સિટી,\nનવસારી- ૩૯૬ ૪૫૦.")
     p_to.paragraph_format.space_after = Pt(6)
     
     p_through = doc.add_paragraph()
     p_through.add_run("મારફત સવિનય: ").bold = True
-    p_through.add_run("આચાર્ય અને ડિનશ્રી , ન. મ. કૃષિ મહાવિદ્યાલય, ન.કૃ.યુ., નવસારી ૩૯૬ ૪૫૦")
+    p_through.add_run("આચાર્ય અને ડીનશ્રી, ન. મ. કૃષિ મહાવિદ્યાલય, ન.કૃ.યુ., નવસારી ૩૯૬ ૪૫૦.")
     p_through.paragraph_format.space_after = Pt(6)
     
     p_sub = doc.add_paragraph()
@@ -739,7 +739,7 @@ def generate_auc_forwarding_docx(ref_no, letter_date, subject_text, body_text):
     p_body.paragraph_format.first_line_indent = Inches(0.5) 
     p_body.paragraph_format.space_after = Pt(24)
     
-    p_enc = doc.add_paragraph("સામેલ: ઉપર મુજબ (AUC)")
+    p_enc = doc.add_paragraph("સામેલ: ઉપર મુજબ")
     p_enc.paragraph_format.space_after = Pt(36)
     
     table5 = doc.add_table(rows=1, cols=2)
@@ -2125,10 +2125,15 @@ def main():
                     
         with col_b:
             st.subheader("2. AUC Forwarding Letter")
-            ref_no = st.text_input("Reference No. (જા.નં. એસીએન/એન્ટો/___/૨૦૨૬):", value="AUC", key="auc_ref_no")
+            
+            # Using the exact defaults from the uploaded image
+            ref_no = st.text_input("Reference No. (જા.નં. એસીએન/એન્ટો/એઆઈએનપી-એએ/___/૨૦૨૪):", value="288", key="auc_ref_no")
             letter_date = st.text_input("Date (તારીખ):", value=datetime.now().strftime("%d/%m/%Y"), key="auc_letter_date")
-            subj = st.text_area("Subject (વિષય):", value=f"AINP on Agricultural Acarology (BH.303/2092) નું વર્ષ {selected_fy} નુ Audit Utilization Certificate (AUC) મોકલવા બાબત.", key="auc_subject")
-            body = st.text_area("Body Text:", value=f"જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે ચાલતી આઈ.સી.એ.આર. યોજના AINP on Agricultural Acarology (BH.303/2092) નું વર્ષ {selected_fy} નુ Audit Utilization Certificate (AUC) આ સાથે સામેલ રાખી મોકલી આપીએ છીએ.", key="auc_body_text")
+            
+            subj = st.text_area("Subject (વિષય):", value=f"AINP on Agricultural Acarology (B.H. 303/2092) નું વર્ષ {selected_fy} નુ Audit Utilization Certificate (AUC) મોકલવા બાબત.", key="auc_subject")
+            
+            default_body = f"જય ભારત સહ ઉપરોક્ત વિષય અન્વયે સવિનય જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે ચાલતી આઈ.સી.એ.આર. યોજના AINP on Agricultural Acarology (B.H. 303/2092) નું વર્ષ {selected_fy} નુ Audit Utilization Certificate (AUC) આ સાથે સામેલ રાખી મોકલી આપીએ છીએ.\n\nજે આપ સાહેબને વિદિત થાય."
+            body = st.text_area("Body Text:", value=default_body, height=150, key="auc_body_text")
             
             if st.button("📥 Generate & Download Forwarding Letter", key="auc_download_btn"):
                 with st.spinner("Generating Letter..."):
