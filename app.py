@@ -1598,7 +1598,7 @@ def main():
         last_day = calendar.monthrange(soe_year, month_idx)[1]
         end_date = datetime(soe_year, month_idx, last_day) # Last day of selected month
 
-# 3. Setup Opening Balances Dictionary
+3. Setup Opening Balances Dictionary
         if 'opening_balances' not in data:
             data['opening_balances'] = {
                 "Establishment Charges": 0.0, "TA": 0.0, "Contingencies": 0.0, 
@@ -1623,40 +1623,6 @@ def main():
                     data['opening_balances'] = new_obs
                     save_data(data, selected_fy)
                     st.success(f"Opening Balances manually updated for {selected_fy}!")
-                    st.rerun()
-                    
-            with col_dl:
-                pdf_path = f"documents/Old_AUC_{selected_fy}.pdf"
-                if os.path.exists(pdf_path):
-                    st.success("✅ Previous Year's AUC is saved on file.")
-                    with open(pdf_path, "rb") as pdf_file:
-                        st.download_button(
-                            label="📥 Download Saved Old AUC", 
-                            data=pdf_file, 
-                            file_name=f"Old_AUC_Prior_to_{selected_fy}.pdf", 
-                            mime="application/pdf", 
-                            key=f"dl_old_auc_{selected_fy}"
-                        )
-
-            st.divider()
-            
-            # --- EXISTING: Manual Form (now pre-filled with AI extraction) ---
-            st.write(f"**Editable Opening Balances (as on 01.04.{fy_start_year})**")
-            with st.form(f"ob_form_{selected_fy}"):
-                cols = st.columns(3)
-                new_obs = {}
-                for idx, (k, v) in enumerate(data['opening_balances'].items()):
-                    # The unique key forces Streamlit to wipe the box clean when the FY changes
-                    new_obs[k] = cols[idx % 3].number_input(
-                        f"{k} (₹)", 
-                        value=float(v), 
-                        step=1000.0,
-                        key=f"ob_input_{k}_{selected_fy}"
-                    )
-                if st.form_submit_button("💾 Save Opening Balances"):
-                    data['opening_balances'] = new_obs
-                    save_data(data, selected_fy)
-                    st.success(f"Opening Balances Saved for {selected_fy}!")
                     st.rerun()
 
         st.divider()
