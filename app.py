@@ -1784,7 +1784,6 @@ def main():
                         f"{k} (₹)", 
                         value=float(v), 
                         step=1000.0,
-                        key=f"ob_input_{k}_{selected_fy}"
                     )
                 if st.form_submit_button("💾 Save Opening Balances"):
                     data['opening_balances'] = new_obs
