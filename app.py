@@ -627,8 +627,8 @@ def create_annual_word_doc(dataframe, fy_string):
     doc.save(bio)
     bio.seek(0)
     return bio
-    # ---------------------------------------------------------
-# 👇 PASTE THESE NEW FUNCTIONS RIGHT BELOW `create_annual_word_doc` 👇
+# ---------------------------------------------------------
+# 👇 REPLACE YOUR CURRENT `generate_auc_forwarding_docx` FUNCTION
 # ---------------------------------------------------------
 def generate_auc_forwarding_docx(ref_no, letter_date, subject_text, body_text):
     """Generates the Forwarding Letter specifically for the AUC."""
@@ -674,17 +674,40 @@ def generate_auc_forwarding_docx(ref_no, letter_date, subject_text, body_text):
         r_right = p_right.add_run()
         r_right.add_picture(ICAR_LOGO, width=Inches(1.5))
         
+    # --- FIX: Squashed First Thick Black Separator Line ---
     p_thick1 = doc.add_paragraph()
+    p_thick1.paragraph_format.space_before = Pt(0)
+    p_thick1.paragraph_format.space_after = Pt(0)
+    p_thick1.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+    p_thick1.paragraph_format.line_spacing = Pt(1)
+    p_thick1.add_run().font.size = Pt(1) 
     add_bottom_border(p_thick1, size='24')
     
     table2 = doc.add_table(rows=1, cols=2)
+    table2.autofit = False
+    table2.columns[0].width = Inches(3.4)
+    table2.columns[1].width = Inches(3.4)
+
     p1 = table2.cell(0,0).paragraphs[0]
     p1.add_run("ડૉ. જે. જે. પસ્તાગિયા\nપ્રાધ્યાપક અને વડા (ઈ/ચા.)")
     p2 = table2.cell(0,1).paragraphs[0]
     p2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p2.add_run("મોબાઇલ: +૯૧ ૯૮૭૯૦ ૩૮૫૩૯\nઇમેલ: headentonau@gmail.com")
     
+    # --- FIX: Ensure inner paragraphs of table2 have zero spacing ---
+    for cell in table2.rows[0].cells:
+        for p in cell.paragraphs:
+            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.line_spacing = 0.8  # This squashes the \n gap
+            
+    # --- FIX: Squashed Second Thick Black Separator Line ---
     p_thick2 = doc.add_paragraph()
+    p_thick2.paragraph_format.space_before = Pt(0)
+    p_thick2.paragraph_format.space_after = Pt(0)
+    p_thick2.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+    p_thick2.paragraph_format.line_spacing = Pt(1)
+    p_thick2.add_run().font.size = Pt(1) 
     add_bottom_border(p_thick2, size='24')
     
     table3 = doc.add_table(rows=1, cols=2)
