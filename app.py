@@ -750,7 +750,7 @@ def generate_auc_certificate(inst_data, t1_data, t2_data, cert_text_1, fy_string
    
     # Certification Text
     p_cert1 = doc.add_paragraph()
-    run_cert1 = p_cert1.add_run("   Form of Utilization Certificate & Audit Utilization Certificate")
+    run_cert1 = p_cert1.add_run("     Form of Utilization Certificate & Audit Utilization Certificate")
     run_cert1.bold = True
     run_cert1.font.size = Pt(18)
     run_cert1.font.name = 'Times New Roman'
@@ -826,17 +826,26 @@ def generate_auc_certificate(inst_data, t1_data, t2_data, cert_text_1, fy_string
 
     doc.add_paragraph("\n\n")
     
-    # Signatures
-    sig_table = doc.add_table(rows=1, cols=4)
+# Signatures
+    sig_table = doc.add_table(rows=1, cols=3)
     sig_table.cell(0,0).text = "PI of the Scheme\nNAU, Navsari"
     sig_table.cell(0,1).text = "Director of Research\nNAU, Navsari"
     sig_table.cell(0,2).text = "Comptroller\nNAU, Navsari"
-    sig_table.cell(0,3).text = "Duly audited and signed by the Chartered Accountant\n\nChartered Accountant"
     
+    # Format the top 3 signatures and center them in their columns
     for row in sig_table.rows:
         for cell in row.cells:
             for paragraph in cell.paragraphs:
                 paragraph.style = doc.styles['Normal']
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # Add spacing for signatures to be signed
+    doc.add_paragraph("\n\n")
+    
+    # Add the Chartered Accountant statement centered below the table
+    p_ca = doc.add_paragraph("Duly audited and signed by the Chartered Accountant\n\n\nChartered Accountant")
+    p_ca.style = doc.styles['Normal']
+    p_ca.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
     bio = io.BytesIO()
     doc.save(bio)
