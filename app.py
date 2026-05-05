@@ -1598,16 +1598,65 @@ def main():
         last_day = calendar.monthrange(soe_year, month_idx)[1]
         end_date = datetime(soe_year, month_idx, last_day) # Last day of selected month
 
-        # 3. Setup Opening Balances Dictionary
+# 3. Setup Opening Balances Dictionary & Historical AUC Archive
         if 'opening_balances' not in data:
             data['opening_balances'] = {
                 "Establishment Charges": 0.0, "TA": 0.0, "Contingencies": 0.0, 
                 "TSP": 0.0, "Equipments": 0.0, "Works": 0.0
             }
             
-        with st.expander(f"⚙️ Set Opening Balances for FY {selected_fy}"):
-            st.write(f"Save the opening balances carried forward as on 01.04.{fy_start_year}.")
+        with st.expander(f"⚙️ Set Opening Balances & Upload Old AUCs for FY {selected_fy}"):
+            st.write(f"Upload the previous year's AUC to automatically extract opening balances, or set them manually below.")
             
+            # --- NEW: Upload and Download Old AUC ---
+            col_up, col_dl = st.columns(2)
+            with col_up:
+                old_auc_file = st.file_uploader("Upload Previous Year's AUC (PDF)", type=['pdf'], key=f"auc_up_{selected_fy}")
+                if old_auc_file and st.button("Extract Balances via AI"):
+                    with st.spinner("AI is analyzing the old AUC..."):
+                        auc_prompt = {
+                            "context": "This is a previous year's Audit Utilization Certificate (AUC). Extract the 'Closing balance as on 31st March' for each specific budget head. If a balance is negative (e.g. (-) 1,38,340.60), return it as a negative number (-138340.60).",
+                            "structure": {
+                                "Establishment Charges": 0.0,
+                                "TA": 0.0,
+                                "Contingencies": 0.0,
+                                "TSP": 0.0,
+                                "Equipments": 0.0,
+                                "Works": 0.0
+                            }
+                        }
+                        extracted_bals = process_upload_with_ai(old_auc_file, auc_prompt)
+                        if extracted_bals:
+                            # Update dictionary with extracted values
+                            for k in data['opening_balances'].keys():
+                                data['opening_balances'][k] = float(extracted_bals.get(k) or 0.0)
+                            save_data(data, selected_fy)
+                            
+                            # Save PDF locally so it can be downloaded anytime
+                            pdf_path = f"documents/Old_AUC_{selected_fy}.pdf"
+                            with open(pdf_path, "wb") as f:
+                                f.write(old_auc_file.getvalue())
+                                
+                            st.success("Balances extracted and old AUC saved!")
+                            st.rerun()
+
+            with col_dl:
+                pdf_path = f"documents/Old_AUC_{selected_fy}.pdf"
+                if os.path.exists(pdf_path):
+                    st.success("✅ Previous Year's AUC is saved on file.")
+                    with open(pdf_path, "rb") as pdf_file:
+                        st.download_button(
+                            label="📥 Download Saved Old AUC", 
+                            data=pdf_file, 
+                            file_name=f"Old_AUC_Prior_to_{selected_fy}.pdf", 
+                            mime="application/pdf", 
+                            key=f"dl_old_auc_{selected_fy}"
+                        )
+
+            st.divider()
+            
+            # --- EXISTING: Manual Form (now pre-filled with AI extraction) ---
+            st.write(f"**Editable Opening Balances (as on 01.04.{fy_start_year})**")
             with st.form(f"ob_form_{selected_fy}"):
                 cols = st.columns(3)
                 new_obs = {}
@@ -1623,7 +1672,7 @@ def main():
                     data['opening_balances'] = new_obs
                     save_data(data, selected_fy)
                     st.success(f"Opening Balances Saved for {selected_fy}!")
-                    st.rerun() 
+                    st.rerun()
 
         st.divider()
         st.markdown(f"<h3 style='text-align: center;'>Statement of Expenditure for the month of {soe_month} {soe_year}</h3>", unsafe_allow_html=True)
