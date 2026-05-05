@@ -1892,59 +1892,73 @@ def main():
         st.header("Audit Utilization Certificate (AUC) & Forwarding Letter")
         st.write("Generate the final year-end AUC and its corresponding Gujarati forwarding letter.")
         
-        # --- NEW: Historical AUC Archive (2021 to 2025) ---
+# --- NEW: Historical AUC Archive (Dynamic Years) ---
         with st.expander("📂 Historical AUC Archive & Auto-Balance Extraction", expanded=False):
             st.write("Upload previous years' signed AUCs to maintain a digital archive. **If you upload the AUC for the strictly previous year, the AI will automatically extract the closing balances and send them to Tab 5!**")
             
-            # Calculate what the "previous year" string should be (e.g., if 2025-26, prev is 2024-25)
+            # Calculate what the "previous year" string should be
             prev_y_start = int(selected_fy.split('-')[0]) - 1
             prev_y_end = str(prev_y_start + 1)[-2:]
             prev_fy_string = f"{prev_y_start}-{prev_y_end}"
             
-            archive_years = ["2021-22", "2022-23", "2023-24", "2024-25"]
+            # Generate a dynamic list of years (10 years back, 2 years forward)
+            current_y = datetime.now().year
+            dynamic_years = [f"{y}-{str(y+1)[-2:]}" for y in range(current_y - 10, current_y + 2)]
             
-            for a_year in archive_years:
-                c1, c2, c3 = st.columns([1.5, 2, 1])
-                with c1:
-                    st.markdown(f"**FY {a_year} AUC**")
-                
-                pdf_path = f"documents/AUC_Archive_{a_year}.pdf"
-                
-                with c2:
-                    up_file = st.file_uploader(f"Upload {a_year}", type=['pdf'], key=f"up_arc_{a_year}", label_visibility="collapsed")
-                    if up_file and st.button(f"Save {a_year}", key=f"btn_ext_{a_year}"):
-                        # 1. Save the file permanently
-                        with open(pdf_path, "wb") as f:
-                            f.write(up_file.getvalue())
-                        
-                        # 2. If it is the previous year, trigger the AI Extraction!
-                        if a_year == prev_fy_string:
-                            with st.spinner(f"Extracting closing balances from {a_year} to use as opening balances..."):
-                                auc_prompt = {
-                                    "context": "This is a previous year's Audit Utilization Certificate (AUC). Extract the 'Closing balance as on 31st March' for each specific budget head. If a balance is negative (e.g. (-) 1,38,340.60), return it as a negative number (-138340.60).",
-                                    "structure": {
-                                        "Establishment Charges": 0.0, "TA": 0.0, "Contingencies": 0.0,
-                                        "TSP": 0.0, "Equipments": 0.0, "Works": 0.0
-                                    }
+            # Select which year's archive you want to view/upload
+            selected_archive_year = st.selectbox(
+                "Select Year to Upload or View:", 
+                dynamic_years, 
+                index=dynamic_years.index(prev_fy_string) if prev_fy_string in dynamic_years else 0
+            )
+            
+            pdf_path = f"documents/AUC_Archive_{selected_archive_year}.pdf"
+            
+            col_up, col_dl = st.columns(2)
+            
+            with col_up:
+                up_file = st.file_uploader(f"Upload AUC for {selected_archive_year}", type=['pdf'], key="up_arc_dyn")
+                if up_file and st.button(f"Save & Process {selected_archive_year}", key="btn_ext_dyn"):
+                    # 1. Save the file permanently
+                    with open(pdf_path, "wb") as f:
+                        f.write(up_file.getvalue())
+                    
+                    # 2. If it is the strictly previous year, trigger the AI Extraction!
+                    if selected_archive_year == prev_fy_string:
+                        with st.spinner(f"Extracting closing balances from {selected_archive_year} to use as opening balances..."):
+                            auc_prompt = {
+                                "context": "This is a previous year's Audit Utilization Certificate (AUC). Extract the 'Closing balance as on 31st March' for each specific budget head. If a balance is negative (e.g. (-) 1,38,340.60), return it as a negative number (-138340.60).",
+                                "structure": {
+                                    "Establishment Charges": 0.0, "TA": 0.0, "Contingencies": 0.0,
+                                    "TSP": 0.0, "Equipments": 0.0, "Works": 0.0
                                 }
-                                extracted_bals = process_upload_with_ai(up_file, auc_prompt)
-                                if extracted_bals:
-                                    if 'opening_balances' not in data:
-                                        data['opening_balances'] = {}
-                                    for k in ["Establishment Charges", "TA", "Contingencies", "TSP", "Equipments", "Works"]:
-                                        data['opening_balances'][k] = float(extracted_bals.get(k) or 0.0)
-                                    save_data(data, selected_fy)
-                                    st.success(f"Balances extracted and sent to Tab 5 SOE!")
-                        else:
-                            st.success(f"Archive saved for {a_year}!")
-                        st.rerun()
-                        
-                with c3:
-                    if os.path.exists(pdf_path):
-                        with open(pdf_path, "rb") as f:
-                            st.download_button("📥 Download", data=f, file_name=f"AUC_Signed_{a_year}.pdf", mime="application/pdf", key=f"dl_arc_{a_year}")
+                            }
+                            extracted_bals = process_upload_with_ai(up_file, auc_prompt)
+                            if extracted_bals:
+                                if 'opening_balances' not in data:
+                                    data['opening_balances'] = {}
+                                for k in ["Establishment Charges", "TA", "Contingencies", "TSP", "Equipments", "Works"]:
+                                    data['opening_balances'][k] = float(extracted_bals.get(k) or 0.0)
+                                save_data(data, selected_fy)
+                                st.success("Balances extracted and sent to Tab 5 SOE!")
                     else:
-                        st.write("❌ Not Uploaded")
+                        st.success(f"Archive saved for {selected_archive_year}!")
+                    st.rerun()
+                    
+            with col_dl:
+                st.write("###") # Spacing to align with uploader
+                if os.path.exists(pdf_path):
+                    st.success(f"✅ AUC for {selected_archive_year} is on file.")
+                    with open(pdf_path, "rb") as f:
+                        st.download_button(
+                            label=f"📥 Download {selected_archive_year} AUC", 
+                            data=f, 
+                            file_name=f"AUC_Signed_{selected_archive_year}.pdf", 
+                            mime="application/pdf", 
+                            key="dl_arc_dyn"
+                        )
+                else:
+                    st.info("❌ No file uploaded for this year yet.")
         
         st.divider()
 
