@@ -747,6 +747,13 @@ def generate_auc_certificate(inst_data, t1_data, t2_data, cert_text_1, fy_string
     style = doc.styles['Normal']
     style.font.name = 'Times New Roman'
     style.font.size = Pt(11)
+   
+    # Certification Text
+    p_cert1 = doc.add_paragraph()
+    run_cert1 = p_cert1.add_run("Form of Utilization Certificate & Audit Utilization Certificate")
+    run_cert1.bold = True
+    run_cert1.font.size = Pt(12)
+    run_cert1.font.name = 'Times New Roman'
     
     # Installment Table
     inst_table = doc.add_table(rows=1, cols=3)
@@ -768,14 +775,7 @@ def generate_auc_certificate(inst_data, t1_data, t2_data, cert_text_1, fy_string
                 paragraph.style = doc.styles['Normal']
     
     doc.add_paragraph()
-    
-    # Certification Text
-    p_cert1 = doc.add_paragraph()
-    run_cert1 = p_cert1.add_run("Form of Utilization Certificate & Audit Utilization Certificate")
-    run_cert1.bold = True
-    run_cert1.font.size = Pt(12)
-    run_cert1.font.name = 'Times New Roman'
-    
+        
     # Inject the user-edited text paragraph here
     p_text = doc.add_paragraph(f"{cert_text_1}\n")
     p_text.add_run("2. Certified that I have satisfied myself that the condition on which the expenditure was made have dully fulfilled/are being fulfilled and that I have exercised the following check to see that the money was actually utilized for the purpose for which it was sanctioned.")
