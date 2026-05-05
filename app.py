@@ -752,7 +752,7 @@ def generate_auc_certificate(inst_data, t1_data, t2_data, cert_text_1, fy_string
     p_cert1 = doc.add_paragraph()
     run_cert1 = p_cert1.add_run("Form of Utilization Certificate & Audit Utilization Certificate")
     run_cert1.bold = True
-    run_cert1.font.size = Pt(12)
+    run_cert1.font.size = Pt(18)
     run_cert1.font.name = 'Times New Roman'
     
     # Installment Table
