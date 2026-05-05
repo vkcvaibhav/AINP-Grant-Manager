@@ -1831,9 +1831,51 @@ def main():
                     # Step 3: Sort Newest to Oldest so the latest entries show up on top
                     df_yearly_log = df_yearly_log.sort_values(by='date_obj', ascending=False)
 
-                    # Show final cumulative total for this filtered view
+                    # Show final cumulative total and Download Button side-by-side
                     filtered_total = df_yearly_log['amount'].astype(float).sum()
-                    st.success(f"**Final Total Spent for {selected_log_head}:** ₹{filtered_total:,.2f}")
+                    
+                    col_tot, col_dl = st.columns([3, 1])
+                    with col_tot:
+                        st.success(f"**Final Total Spent for {selected_log_head}:** ₹{filtered_total:,.2f}")
+                        
+                    with col_dl:
+                        # Auto-generate PDF in the background
+                        pdf = FPDF(orientation='L')
+                        pdf.add_page()
+                        pdf.set_font("Arial", 'B', 14)
+                        pdf.cell(0, 10, f"Expenditure Log - {selected_log_head} (FY {selected_fy})", ln=True, align='C')
+                        pdf.ln(5)
+                        
+                        pdf.set_font("Arial", 'B', 10)
+                        cols = [25, 60, 30, 35, 125]
+                        headers = ["Date", "Budget Head", "Amount", "Prog. Total", "Details"]
+                        for i, h in enumerate(headers):
+                            pdf.cell(cols[i], 10, h, 1, 0, 'C')
+                        pdf.ln()
+                        
+                        pdf.set_font("Arial", '', 10)
+                        for _, r in df_yearly_log.iterrows():
+                            pdf.cell(cols[0], 10, str(r['date']), 1, 0, 'C')
+                            pdf.cell(cols[1], 10, str(r['head'])[:30], 1, 0, 'L')
+                            pdf.cell(cols[2], 10, f"{float(r['amount']):,.2f}", 1, 0, 'R')
+                            pdf.cell(cols[3], 10, f"{float(r['progressive_total']):,.2f}", 1, 0, 'R')
+                            
+                            # Clean details to avoid PDF encoding errors (removes emojis/unsupported chars)
+                            detail_txt = str(r['detail']).replace('\n', ' ').encode('latin-1', 'ignore').decode('latin-1')[:75]
+                            pdf.cell(cols[4], 10, detail_txt, 1, 0, 'L')
+                            pdf.ln()
+                            
+                        pdf_path = f"documents/Expenditure_Log_{selected_fy}.pdf"
+                        pdf.output(pdf_path)
+                        
+                        with open(pdf_path, "rb") as f:
+                            st.download_button(
+                                label="📥 Download Log (PDF)",
+                                data=f,
+                                file_name=f"Expenditure_Log_{selected_log_head}_{selected_fy}.pdf".replace(" ", "_"),
+                                mime="application/pdf",
+                                key="dl_log_pdf"
+                            )
                     
                     # Render Table Header (Now with 6 columns)
                     yc1, yc2, yc3, yc4, yc5, yc6 = st.columns([1.2, 2.2, 1.5, 1.5, 2.6, 1])
