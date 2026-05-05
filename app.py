@@ -1770,7 +1770,72 @@ def main():
                 df_year_sum.loc[len(df_year_sum)] = ['**GRAND TOTAL**', total_amount]
                 
                 st.dataframe(df_year_sum, use_container_width=True, hide_index=True)
-
+            # =====================================================================
+            # 👇 PASTE THIS NEW SECTION RIGHT BELOW THE SUMMARY TABLES 👇
+            # =====================================================================
+            st.divider()
+            st.subheader("📜 Cumulative Expenditure Log (Yearly)")
+            st.write("View all expenditures for the year, filter by Budget Head, and delete accidental entries.")
+            
+            # Filter by Budget Head
+            selected_log_head = st.selectbox("Filter by Budget Head:", ["All Heads"] + BUDGET_HEADS, key="log_head_filter")
+            
+            # Re-inject original index so we can delete safely
+            exp_list_yearly = data.get('expenditure', [])
+            for i, exp in enumerate(exp_list_yearly):
+                exp['_orig_idx'] = i
+                
+            df_yearly_log = pd.DataFrame(exp_list_yearly)
+            
+            if not df_yearly_log.empty:
+                # Ensure date sorting (Newest first)
+                df_yearly_log['date_obj'] = pd.to_datetime(df_yearly_log['date'])
+                df_yearly_log = df_yearly_log.sort_values(by='date_obj', ascending=False)
+                
+                # Filter by selected head
+                if selected_log_head != "All Heads":
+                    df_yearly_log = df_yearly_log[df_yearly_log['head'] == selected_log_head]
+                
+                if not df_yearly_log.empty:
+                    # Show cumulative total for this filtered view
+                    filtered_total = df_yearly_log['amount'].astype(float).sum()
+                    st.success(f"**Cumulative Total for {selected_log_head}:** ₹{filtered_total:,.2f}")
+                    
+                    # Render Table Header
+                    yc1, yc2, yc3, yc4, yc5 = st.columns([1.5, 2.5, 1.5, 3, 1])
+                    yc1.markdown("**Date**")
+                    yc2.markdown("**Budget Head**")
+                    yc3.markdown("**Amount (₹)**")
+                    yc4.markdown("**Details**")
+                    yc5.markdown("**Action**")
+                    
+                    # Render Rows
+                    for _, row in df_yearly_log.iterrows():
+                        rc1, rc2, rc3, rc4, rc5 = st.columns([1.5, 2.5, 1.5, 3, 1])
+                        rc1.write(row['date'])
+                        rc2.write(row['head'])
+                        rc3.write(f"₹{float(row['amount']):,.2f}")
+                        rc4.write(row['detail'])
+                        
+                        # Unique delete button for the yearly log
+                        if rc5.button("🗑️ Delete", key=f"del_yr_exp_{row['_orig_idx']}"):
+                            data['expenditure'].pop(row['_orig_idx'])
+                            
+                            # Clean up index before saving
+                            for e in data['expenditure']:
+                                e.pop('_orig_idx', None)
+                                
+                            save_data(data, selected_fy)
+                            st.toast("Yearly log entry deleted successfully!")
+                            st.rerun()
+                else:
+                    st.info(f"No expenditures found for {selected_log_head} in this financial year.")
+            else:
+                st.info("No expenditures recorded yet.")
+                
+            # Final cleanup of the temporary index
+            for e in data.get('expenditure', []):
+                e.pop('_orig_idx', None)
 
 # --- TAB 6: SOE GENERATION ---
     with tabs[5]:
