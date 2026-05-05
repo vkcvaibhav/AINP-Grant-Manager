@@ -901,21 +901,119 @@ def main():
     
     # --- TAB 1: DASHBOARD ---
     with tabs[0]:
-        st.header(f"Financial Year {selected_fy}")
+        st.header(f"📊 Financial Dashboard (FY {selected_fy})")
         
-        current_qtr = data.get('latest_quarter', 'Full Year')
-        last_date = data.get('latest_date', 'N/A')
-        st.markdown(f"**Current Active Budget Period:** {current_qtr} | **Last Document Date:** {last_date}")
+        # --- 1. DATA PREPARATION ---
+        # Get Active Allocation
+        active_budget = data.get('revised_allocation') if data.get('revised_allocation') else data.get('allocation', {})
+        total_allocated = sum(v.get('total', 0) for v in active_budget.values()) if active_budget else 0.0
         
-        col1, col2, col3 = st.columns(3)
+        # Get Total Received
+        total_received = sum(inst['amount'] for inst in data.get('installments', []))
+        
+        # Get Total Spent
+        df_exp = pd.DataFrame(data.get('expenditure', []))
+        total_spent = df_exp['amount'].sum() if not df_exp.empty else 0.0
+        
+        # Calculate Available Physical Balance
+        available_balance = total_received - total_spent
+        
+        # Quick Matcher for Heads (for received funds)
+        def dash_match_head(raw_string):
+            rs = str(raw_string).upper()
+            if "PAY" in rs or "ESTABLISHMENT" in rs: return "Pay and Allowances"
+            if "TA" in rs or "TRAVELLING" in rs: return "Travelling Allowances (TA)"
+            if "TSP" in rs: return "TSP"
+            if "NON" in rs or "EQUIP" in rs or "WORK" in rs: return "Non-Recurring Contingencies (Equipments/Works)" 
+            if "ORC" in rs or "CONTINGENC" in rs or "RECURRING" in rs: return "Other Recurring Contingencies (ORC)"
+            return None
+
+        # Build Head-wise Data
+        head_stats = []
+        for head in BUDGET_HEADS:
+            alloc = active_budget.get(head, {}).get('total', 0.0)
+            
+            recv = 0.0
+            for inst in data.get('installments', []):
+                for h, amt in inst.get('heads', {}).items():
+                    if dash_match_head(h) == head:
+                        recv += float(amt)
+                        
+            spent = 0.0
+            if not df_exp.empty:
+                spent = df_exp[df_exp['head'] == head]['amount'].sum()
+                
+            head_stats.append({
+                "Budget Head": head,
+                "Allocated (₹)": alloc,
+                "Received (₹)": recv,
+                "Spent (₹)": spent,
+                "Remaining (Received - Spent)": recv - spent
+            })
+            
+        df_heads = pd.DataFrame(head_stats).set_index("Budget Head")
+
+        # --- 2. TOP METRICS ROW ---
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            total_allocated = sum(v.get('total', 0) for k,v in data['revised_allocation'].items()) if data['revised_allocation'] else (sum(v.get('total', 0) for k,v in data['allocation'].items()) if data['allocation'] else 0)
-            st.metric("Total Sanctioned Budget", f"₹{total_allocated:,}")
+            st.metric("Total Sanctioned Budget", f"₹{total_allocated:,.0f}")
         with col2:
-            total_received = sum(inst['amount'] for inst in data['installments'])
-            st.metric("Total Funds Received (PFMS)", f"₹{total_received:,}")
+            recv_pct = (total_received / total_allocated * 100) if total_allocated > 0 else 0
+            st.metric("Total Funds Received", f"₹{total_received:,.0f}", f"{recv_pct:.1f}% of Sanctioned", delta_color="normal")
         with col3:
-            st.metric("Pending Received", f"₹{total_allocated - total_received:,}")
+            spent_pct = (total_spent / total_received * 100) if total_received > 0 else 0
+            st.metric("Total Expenditure", f"₹{total_spent:,.0f}", f"{spent_pct:.1f}% of Received utilized", delta_color="inverse")
+        with col4:
+            st.metric("Available Cash Balance", f"₹{available_balance:,.0f}", f"₹{total_allocated - total_received:,.0f} Pending from ICAR", delta_color="off")
+
+        st.divider()
+
+        # --- 3. CONCERNS & ALERTS SECTION ---
+        alerts = []
+        if total_allocated > total_received:
+            alerts.append(f"⏳ **Pending Grant:** ₹{total_allocated - total_received:,.2f} is sanctioned but not yet received from the Council.")
+            
+        for idx, row in df_heads.iterrows():
+            if row['Spent (₹)'] > row['Received (₹)']:
+                alerts.append(f"🚨 **Deficit Alert:** Expenditure in **{idx}** (₹{row['Spent (₹)']:,.0f}) exceeds the funds currently received (₹{row['Received (₹)']:,.0f}) for this head!")
+            elif row['Allocated (₹)'] > 0 and (row['Spent (₹)'] / row['Allocated (₹)']) > 0.9:
+                alerts.append(f"⚠️ **Near Empty:** You have utilized over 90% of the total sanctioned budget for **{idx}**.")
+
+        if alerts:
+            with st.expander("🚨 Actionable Alerts & Financial Concerns (Click to expand)", expanded=True):
+                for alert in alerts:
+                    if "🚨" in alert: st.error(alert)
+                    elif "⚠️" in alert: st.warning(alert)
+                    else: st.info(alert)
+        else:
+            st.success("✅ Financial Health is stable. No immediate concerns or deficits detected.")
+
+        # --- 4. VISUALIZATIONS ---
+        col_chart, col_table = st.columns([1.5, 1])
+        
+        with col_chart:
+            st.subheader("Head-wise Financial Status")
+            # Bar chart comparing Allocated vs Received vs Spent
+            st.bar_chart(df_heads[["Allocated (₹)", "Received (₹)", "Spent (₹)"]], height=350)
+            
+        with col_table:
+            st.subheader("Head-wise Details")
+            # Display clean table with numbers
+            st.dataframe(df_heads.style.format("{:,.0f}"), use_container_width=True, height=350)
+
+        # --- 5. MONTHLY BURN RATE (TREND) ---
+        st.divider()
+        st.subheader("📈 Monthly Expenditure Trend")
+        if not df_exp.empty:
+            df_exp['date'] = pd.to_datetime(df_exp['date'])
+            # Extract Year-Month for grouping (e.g., "2025-04")
+            df_exp['Month'] = df_exp['date'].dt.to_period('M').astype(str)
+            monthly_trend = df_exp.groupby('Month')['amount'].sum().reset_index()
+            monthly_trend = monthly_trend.set_index('Month')
+            
+            st.bar_chart(monthly_trend, height=300, color="#FF4B4B")
+        else:
+            st.info("No expenditures logged yet to display trends. Go to Tab 4 to add expenses.")
 
     # --- TAB 2: BUDGET INTAKE ---
     with tabs[1]:
