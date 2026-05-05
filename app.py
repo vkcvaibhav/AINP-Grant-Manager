@@ -1804,7 +1804,7 @@ def main():
             # =====================================================================
             st.divider()
             st.subheader("📜 Cumulative Expenditure Log (Yearly)")
-            st.write("View all expenditures for the year, filter by Budget Head, and delete accidental entries.")
+            st.write("View all expenditures, track progressive totals, filter by Budget Head, and delete accidental entries.")
             
             # Filter by Budget Head
             selected_log_head = st.selectbox("Filter by Budget Head:", ["All Heads"] + BUDGET_HEADS, key="log_head_filter")
@@ -1817,37 +1817,44 @@ def main():
             df_yearly_log = pd.DataFrame(exp_list_yearly)
             
             if not df_yearly_log.empty:
-                # Ensure date sorting (Newest first)
                 df_yearly_log['date_obj'] = pd.to_datetime(df_yearly_log['date'])
-                df_yearly_log = df_yearly_log.sort_values(by='date_obj', ascending=False)
                 
-                # Filter by selected head
+                # Step 1: Filter by selected head
                 if selected_log_head != "All Heads":
                     df_yearly_log = df_yearly_log[df_yearly_log['head'] == selected_log_head]
                 
                 if not df_yearly_log.empty:
-                    # Show cumulative total for this filtered view
-                    filtered_total = df_yearly_log['amount'].astype(float).sum()
-                    st.success(f"**Cumulative Total for {selected_log_head}:** ₹{filtered_total:,.2f}")
+                    # Step 2: Sort Oldest to Newest to calculate the Progressive Total correctly
+                    df_yearly_log = df_yearly_log.sort_values(by='date_obj', ascending=True)
+                    df_yearly_log['progressive_total'] = df_yearly_log['amount'].astype(float).cumsum()
                     
-                    # Render Table Header
-                    yc1, yc2, yc3, yc4, yc5 = st.columns([1.5, 2.5, 1.5, 3, 1])
+                    # Step 3: Sort Newest to Oldest so the latest entries show up on top
+                    df_yearly_log = df_yearly_log.sort_values(by='date_obj', ascending=False)
+
+                    # Show final cumulative total for this filtered view
+                    filtered_total = df_yearly_log['amount'].astype(float).sum()
+                    st.success(f"**Final Total Spent for {selected_log_head}:** ₹{filtered_total:,.2f}")
+                    
+                    # Render Table Header (Now with 6 columns)
+                    yc1, yc2, yc3, yc4, yc5, yc6 = st.columns([1.2, 2.2, 1.5, 1.5, 2.6, 1])
                     yc1.markdown("**Date**")
                     yc2.markdown("**Budget Head**")
                     yc3.markdown("**Amount (₹)**")
-                    yc4.markdown("**Details**")
-                    yc5.markdown("**Action**")
+                    yc4.markdown("**Prog. Total (₹)**")
+                    yc5.markdown("**Details**")
+                    yc6.markdown("**Action**")
                     
                     # Render Rows
                     for _, row in df_yearly_log.iterrows():
-                        rc1, rc2, rc3, rc4, rc5 = st.columns([1.5, 2.5, 1.5, 3, 1])
+                        rc1, rc2, rc3, rc4, rc5, rc6 = st.columns([1.2, 2.2, 1.5, 1.5, 2.6, 1])
                         rc1.write(row['date'])
                         rc2.write(row['head'])
                         rc3.write(f"₹{float(row['amount']):,.2f}")
-                        rc4.write(row['detail'])
+                        rc4.write(f"**₹{float(row['progressive_total']):,.2f}**")  # <-- Progressive Total Displayed Here
+                        rc5.write(row['detail'])
                         
                         # Unique delete button for the yearly log
-                        if rc5.button("🗑️ Delete", key=f"del_yr_exp_{row['_orig_idx']}"):
+                        if rc6.button("🗑️ Delete", key=f"del_yr_exp_{row['_orig_idx']}"):
                             data['expenditure'].pop(row['_orig_idx'])
                             
                             # Clean up index before saving
