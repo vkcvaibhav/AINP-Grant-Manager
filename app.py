@@ -1388,7 +1388,7 @@ def main():
                     del st.session_state['pending_installment']
                     st.rerun()
                     
-        # Display existing installments
+       # Display existing installments
         st.divider()
         st.subheader("📁 Saved Installments (Editable)")
         if data['installments']:
@@ -1400,7 +1400,12 @@ def main():
                 if q_insts:
                     with st.expander(f"📦 {q} Installments ({len(q_insts)})"):
                         for inst in q_insts:
-                            st.markdown(f"**Date:** {inst.get('date')} | **Inst No:** {inst.get('installment_num')} | **Purpose:** {inst.get('purpose')} | **PFMS ID:** {inst.get('pfms_id')}")
+                            # Allow editing basic info
+                            st.write(f"**Date:** {inst.get('date')} | **PFMS ID:** {inst.get('pfms_id')}")
+                            
+                            mc1, mc2 = st.columns(2)
+                            new_inst_num = mc1.text_input("Inst No:", inst.get('installment_num', ''), key=f"enum_{inst['pfms_id']}")
+                            new_purpose = mc2.text_input("Purpose:", inst.get('purpose', ''), key=f"epur_{inst['pfms_id']}")
                             
                             col_a, col_b = st.columns([3, 1])
                             with col_a:
@@ -1413,16 +1418,38 @@ def main():
                                 tot_amt_saved = edited_saved_df["Amount (₹)"].astype(float).sum()
                                 st.markdown(f"**Total Amount:** ₹{tot_amt_saved:,.2f}")
                                 
-                                if st.button("💾 Save Changes", key=f"save_btn_{inst['pfms_id']}"):
-                                    final_heads_saved = {row["Budget Head"]: float(row["Amount (₹)"]) for _, row in edited_saved_df.iterrows()}
-                                    for main_inst in data['installments']:
-                                        if main_inst['pfms_id'] == inst['pfms_id']:
-                                            main_inst['heads'] = final_heads_saved
-                                            main_inst['amount'] = tot_amt_saved
-                                            break
-                                    save_data(data, selected_fy)
-                                    st.toast("Installment Updated!")
-                                    st.rerun()
+                                c_save, c_del = st.columns(2)
+                                with c_save:
+                                    if st.button("💾 Save Changes", key=f"save_btn_{inst['pfms_id']}"):
+                                        final_heads_saved = {row["Budget Head"]: float(row["Amount (₹)"]) for _, row in edited_saved_df.iterrows()}
+                                        for main_inst in data['installments']:
+                                            if main_inst['pfms_id'] == inst['pfms_id']:
+                                                main_inst['heads'] = final_heads_saved
+                                                main_inst['amount'] = tot_amt_saved
+                                                main_inst['installment_num'] = new_inst_num
+                                                main_inst['purpose'] = new_purpose
+                                                main_inst['type'] = new_inst_num if "State Share" not in inst.get('type','') else new_inst_num + " (State Share)"
+                                                break
+                                        save_data(data, selected_fy)
+                                        st.toast("Installment Updated!")
+                                        st.rerun()
+                                with c_del:
+                                    if st.button("🗑️ Delete Installment", key=f"del_btn_{inst['pfms_id']}"):
+                                        data['installments'] = [i for i in data['installments'] if i['pfms_id'] != inst['pfms_id']]
+                                        save_data(data, selected_fy)
+                                        st.toast("Installment Deleted!")
+                                        st.rerun()
+                                        
+                            with col_b:
+                                email_path = f"documents/{selected_fy}_Inst_{inst['pfms_id']}_Email.pdf"
+                                pfms_path = f"documents/{selected_fy}_Inst_{inst['pfms_id']}_PFMS.pdf"
+                                if os.path.exists(email_path):
+                                    with open(email_path, "rb") as f:
+                                        st.download_button("📥 Download Email", f, file_name=f"{inst['pfms_id']}_Email.pdf", key=f"dl_e_{inst['pfms_id']}")
+                                if os.path.exists(pfms_path):
+                                    with open(pfms_path, "rb") as f:
+                                        st.download_button("📥 Download PFMS", f, file_name=f"{inst['pfms_id']}_PFMS.pdf", key=f"dl_p_{inst['pfms_id']}")
+                            st.divider()
                                     
                             with col_b:
                                 email_path = f"documents/{selected_fy}_Inst_{inst['pfms_id']}_Email.pdf"
