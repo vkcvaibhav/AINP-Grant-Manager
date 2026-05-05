@@ -1673,17 +1673,58 @@ def main():
                     save_data(data, selected_fy)
                     st.toast("Expenditure Added and Backed up.")
 
-        # Re-initialize df_exp here so both this tab and the chatbot can see it
-        df_exp = pd.DataFrame(data.get('expenditure', []))
+# Re-initialize df_exp here so both this tab and the chatbot can see it
+        exp_list = data.get('expenditure', [])
+        
+        # Inject a temporary index so we know exactly which item to delete
+        for i, exp in enumerate(exp_list):
+            exp['_orig_idx'] = i
+            
+        df_exp = pd.DataFrame(exp_list)
+        
+        st.subheader(f"Spend list for {month_to_process} {year_to_process}")
         
         if not df_exp.empty:
-            df_exp['date'] = pd.to_datetime(df_exp['date'])
+            df_exp['date_obj'] = pd.to_datetime(df_exp['date'])
             current_month_exp = df_exp[
-                (df_exp['date'].dt.strftime('%B') == month_to_process) & 
-                (df_exp['date'].dt.year == year_to_process)
+                (df_exp['date_obj'].dt.strftime('%B') == month_to_process) & 
+                (df_exp['date_obj'].dt.year == year_to_process)
             ]
-            st.subheader(f"Spend list for {month_to_process} {year_to_process}")
-            st.dataframe(current_month_exp, use_container_width=True)
+            
+            if not current_month_exp.empty:
+                # Render Table Header
+                hc1, hc2, hc3, hc4, hc5 = st.columns([1.5, 2.5, 1.5, 3, 1])
+                hc1.markdown("**Date**")
+                hc2.markdown("**Budget Head**")
+                hc3.markdown("**Amount (₹)**")
+                hc4.markdown("**Details**")
+                hc5.markdown("**Action**")
+                
+                # Render Rows with Delete Buttons
+                for _, row in current_month_exp.iterrows():
+                    c1, c2, c3, c4, c5 = st.columns([1.5, 2.5, 1.5, 3, 1])
+                    c1.write(row['date'])
+                    c2.write(row['head'])
+                    c3.write(f"₹{float(row['amount']):,.2f}")
+                    c4.write(row['detail'])
+                    
+                    # The unique Delete Button for this specific row
+                    if c5.button("🗑️ Delete", key=f"del_exp_{row['_orig_idx']}"):
+                        data['expenditure'].pop(row['_orig_idx'])
+                        
+                        # Clean up the temporary index before saving
+                        for e in data['expenditure']: 
+                            e.pop('_orig_idx', None) 
+                            
+                        save_data(data, selected_fy)
+                        st.toast("Entry deleted successfully!")
+                        st.rerun()
+            else:
+                st.info(f"No expenditure recorded for {month_to_process} {year_to_process}.")
+                
+            # Clean up the temporary index from memory so it doesn't affect save files
+            for e in data['expenditure']: 
+                e.pop('_orig_idx', None)
             
             st.divider()
             
