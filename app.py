@@ -1605,20 +1605,7 @@ def main():
                 "TSP": 0.0, "Equipments": 0.0, "Works": 0.0
             }
             
-        with st.expander(f"⚙️ Set Opening Balances for FY {selected_fy}"):
-            st.write(f"💡 **Tip:** Upload last year's signed AUC in **Tab 6** to auto-fill these balances, or edit them manually below.")
-            
-            with st.form(f"ob_form_{selected_fy}"):
-                cols = st.columns(3)
-                new_obs = {}
-                for idx, (k, v) in enumerate(data['opening_balances'].items()):
-                    # The unique key forces Streamlit to wipe the box clean when the FY changes
-                    new_obs[k] = cols[idx % 3].number_input(
-                        f"{k} (₹)", 
-                        value=float(v), 
-                        step=1000.0,
-                        key=f"ob_input_{k}_{selected_fy}"
-                    )
+       
                 if st.form_submit_button("💾 Save Opening Balances"):
                     data['opening_balances'] = new_obs
                     save_data(data, selected_fy)
