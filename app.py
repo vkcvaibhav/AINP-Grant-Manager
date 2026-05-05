@@ -1450,17 +1450,7 @@ def main():
                                     with open(pfms_path, "rb") as f:
                                         st.download_button("📥 Download PFMS", f, file_name=f"{inst['pfms_id']}_PFMS.pdf", key=f"dl_p_{inst['pfms_id']}")
                             st.divider()
-                                    
-                            with col_b:
-                                email_path = f"documents/{selected_fy}_Inst_{inst['pfms_id']}_Email.pdf"
-                                pfms_path = f"documents/{selected_fy}_Inst_{inst['pfms_id']}_PFMS.pdf"
-                                if os.path.exists(email_path):
-                                    with open(email_path, "rb") as f:
-                                        st.download_button("📥 Download Email PDF", f, file_name=f"{inst['pfms_id']}_Email.pdf", key=f"dl_e_{inst['pfms_id']}")
-                                if os.path.exists(pfms_path):
-                                    with open(pfms_path, "rb") as f:
-                                        st.download_button("📥 Download PFMS PDF", f, file_name=f"{inst['pfms_id']}_PFMS.pdf", key=f"dl_p_{inst['pfms_id']}")
-                            st.divider()
+                               
             
             # --- SUMMARY TABLE ---
             st.divider()
