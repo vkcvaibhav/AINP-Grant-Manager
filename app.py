@@ -845,7 +845,7 @@ def generate_auc_certificate(inst_data, t1_data, t2_data, cert_text_1, fy_string
     doc.add_paragraph("\n\n")
     
     # Add the Chartered Accountant statement centered below the table
-    p_ca = doc.add_paragraph("Duly audited and signed by the Chartered Accountant\n\n\nChartered Accountant")
+    p_ca = doc.add_paragraph("Duly audited and signed by the Chartered Accountant\n\nChartered Accountant")
     p_ca.style = doc.styles['Normal']
     p_ca.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
