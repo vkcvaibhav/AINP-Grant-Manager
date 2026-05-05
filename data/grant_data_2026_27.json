@@ -51,6 +51,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Light bill 06632000371",
             "amount": 161.0
+        },
+        {
+            "date": "2026-04-01",
+            "head": "Pay and Allowances",
+            "detail": "Devbhai salary ",
+            "amount": 67834.0
         }
     ],
     "latest_quarter": "Full Year",
