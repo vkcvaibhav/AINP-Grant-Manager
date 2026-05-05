@@ -1604,8 +1604,6 @@ def main():
                 "Establishment Charges": 0.0, "TA": 0.0, "Contingencies": 0.0, 
                 "TSP": 0.0, "Equipments": 0.0, "Works": 0.0
             }
-            
-       
                 if st.form_submit_button("💾 Save Opening Balances"):
                     data['opening_balances'] = new_obs
                     save_data(data, selected_fy)
