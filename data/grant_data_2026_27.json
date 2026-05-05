@@ -8,7 +8,25 @@
         "Q3": {},
         "Q4": {}
     },
-    "installments": [],
+    "installments": [
+        {
+            "date": "2026-04-16",
+            "quarter": "Q1",
+            "installment_num": "I",
+            "purpose": "GIA-Salary",
+            "pfms_id": "IDIBR52026041601672704",
+            "amount": 250000.0,
+            "heads": {
+                "Pay and Allowances": 250000.0,
+                "Travelling Allowances (TA)": 0.0,
+                "Other Recurring Contingencies (ORC)": 0.0,
+                "Non-Recurring Contingencies (Equipments/Works)": 0.0,
+                "TSP": 0.0
+            },
+            "type": "I",
+            "available": false
+        }
+    ],
     "expenditure": [
         {
             "date": "2026-04-16",
