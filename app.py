@@ -734,7 +734,7 @@ def generate_auc_forwarding_docx(ref_no, letter_date, subject_text, body_text):
 # ---------------------------------------------------------
 # 👇 REPLACE YOUR CURRENT `generate_auc_certificate` FUNCTION
 # ---------------------------------------------------------
-def generate_auc_certificate(inst_data, t1_data, t2_data, text_vars, fy_string):
+def generate_auc_certificate(inst_data, t1_data, t2_data, cert_text_1, fy_string):
     """Generates the official Audit Utilization Certificate."""
     doc = Document()
     
@@ -776,9 +776,8 @@ def generate_auc_certificate(inst_data, t1_data, t2_data, text_vars, fy_string):
     run_cert1.font.size = Pt(12)
     run_cert1.font.name = 'Times New Roman'
     
-    p_text = doc.add_paragraph(
-        f"1. Certified that the out of Rs. {text_vars['tot_remittance']} sanctioned during the year {fy_string} in favour of Comptroller, NAU, Navsari under this Ministry/Department Letter No. given in the margin and Rs. {text_vars['opening_bal']} on account of unspent balance of the previous year, a sum of Rs. {text_vars['tot_icar_exp']} has been Utilized for the purpose of Agril. Acarology Research and remaining unutilized at the end of the year has been surrendered (vide No......Dated......) will be adjusted (to be payable the next year).\n"
-    )
+    # Inject the user-edited text paragraph here
+    p_text = doc.add_paragraph(f"{cert_text_1}\n")
     p_text.add_run("2. Certified that I have satisfied myself that the condition on which the expenditure was made have dully fulfilled/are being fulfilled and that I have exercised the following check to see that the money was actually utilized for the purpose for which it was sanctioned.")
     
     p_t1_title = doc.add_paragraph("\nTable 1: Showing the details of receipt and expenditure figure (in Rupees)")
@@ -1970,30 +1969,37 @@ def main():
         tot_all_exp = sum(exp_y.values())
         t2_data.append(["Total:-", format_inr_auc(tot_alloc), format_inr_auc(tot_icar_exp), format_inr_auc(tot_state_exp), format_inr_auc(tot_all_exp)])
         
-        text_vars = {
-            "tot_remittance": format_inr_auc(tot_remittance),
-            "opening_bal": format_inr_auc(total_opening_bal_icar),
-            "tot_icar_exp": format_inr_auc(tot_icar_exp)
-        }
-
-        # --- LIVE PREVIEW SECTION ---
+        # --- EDITABLE LIVE PREVIEW SECTION ---
         st.divider()
-        st.subheader("👀 AUC Live Preview")
+        st.subheader("👀 AUC Live Preview & Editor")
+        st.info("💡 Make any adjustments below before generating the final Word document.")
         
+        # 1. Editable Installment Table
         st.markdown("**Received Installments:**")
-        st.table(pd.DataFrame(inst_data, columns=["Sr.No", "Letter No and Date", "Amount"]))
+        df_inst = pd.DataFrame(inst_data, columns=["Sr.No", "Letter No and Date", "Amount"])
+        edited_df_inst = st.data_editor(df_inst, use_container_width=True, hide_index=True, key="auc_edit_inst")
+        final_inst_data = edited_df_inst.values.tolist()
         
+        # 2. Editable Main Paragraph
         st.markdown("**Form of Utilization Certificate & Audit Utilization Certificate**")
-        st.markdown(f"1. Certified that the out of Rs. **{text_vars['tot_remittance']}** sanctioned during the year **{selected_fy}** in favour of Comptroller, NAU, Navsari under this Ministry/Department Letter No. given in the margin and Rs. **{text_vars['opening_bal']}** on account of unspent balance of the previous year, a sum of Rs. **{text_vars['tot_icar_exp']}** has been Utilized for the purpose of Agril. Acarology Research and remaining unutilized at the end of the year has been surrendered (vide No......Dated......) will be adjusted (to be payable the next year).")
+        default_cert_text = f"1. Certified that the out of Rs. {format_inr_auc(tot_remittance)} sanctioned during the year {selected_fy} in favour of Comptroller, NAU, Navsari under this Ministry/Department Letter No. given in the margin and Rs. {format_inr_auc(total_opening_bal_icar)} on account of unspent balance of the previous year, a sum of Rs. {format_inr_auc(tot_icar_exp)} has been Utilized for the purpose of Agril. Acarology Research and remaining unutilized at the end of the year has been surrendered (vide No......Dated......) will be adjusted (to be payable the next year)."
+        
+        edited_cert_text = st.text_area("Certificate Paragraph 1 (Editable):", value=default_cert_text, height=120)
         st.markdown("2. Certified that I have satisfied myself that the condition on which the expenditure was made have dully fulfilled/are being fulfilled and that I have exercised the following check to see that the money was actually utilized for the purpose for which it was sanctioned.")
         
+        # 3. Editable Table 1
         st.markdown("**Table 1: Showing the details of receipt and expenditure figure (in Rupees)**")
         t1_columns = [f"Opening balance as on 1st April {fy_start_year}", f"Remittance Received {selected_fy}", "Receipt", f"ICAR share of Exp during {selected_fy}", f"Closing balance as on 31st March {fy_end_year}"]
-        st.table(pd.DataFrame([t1_data], columns=t1_columns))
+        df_t1 = pd.DataFrame([t1_data], columns=t1_columns)
+        edited_df_t1 = st.data_editor(df_t1, use_container_width=True, hide_index=True, key="auc_edit_t1")
+        final_t1_data = edited_df_t1.values.tolist()[0]
         
+        # 4. Editable Table 2
         st.markdown("**Table 2: Showing the head wise details of expenditure figure (in Rupees)**")
         t2_columns = ["Head", f"Allocation for the Year {selected_fy} (100%)", "ICAR share of Expenditure (75%)", "State Share (25%)", "Total Expenditure"]
-        st.table(pd.DataFrame(t2_data, columns=t2_columns))
+        df_t2 = pd.DataFrame(t2_data, columns=t2_columns)
+        edited_df_t2 = st.data_editor(df_t2, use_container_width=True, hide_index=True, key="auc_edit_t2")
+        final_t2_data = edited_df_t2.values.tolist()
         
         st.divider()
 
@@ -2001,15 +2007,15 @@ def main():
         col_a, col_b = st.columns(2)
         with col_a:
             st.subheader("1. Audit Utilization Certificate (AUC)")
-            st.write("Calculations are generated automatically based on FY entries.")
+            st.write("Generates using the edited data from the preview above.")
             if st.button("📥 Generate & Download AUC Document"):
                 with st.spinner("Generating AUC..."):
-                    auc_doc = generate_auc_certificate(inst_data, t1_data, t2_data, text_vars, selected_fy)
+                    # Pass the final edited values into the generator
+                    auc_doc = generate_auc_certificate(final_inst_data, final_t1_data, final_t2_data, edited_cert_text, selected_fy)
                     st.download_button("Download AUC (.docx)", data=auc_doc, file_name=f"AUC_FY_{selected_fy}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                     
         with col_b:
             st.subheader("2. AUC Forwarding Letter")
-            
             ref_no = st.text_input("Reference No. (જા.નં. એસીએન/એન્ટો/___/૨૦૨૬):", value="AUC", key="auc_ref_no")
             letter_date = st.text_input("Date (તારીખ):", value=datetime.now().strftime("%d/%m/%Y"), key="auc_letter_date")
             subj = st.text_area("Subject (વિષય):", value=f"AINP on Agricultural Acarology (BH.303/2092) નું વર્ષ {selected_fy} નુ Audit Utilization Certificate (AUC) મોકલવા બાબત.", key="auc_subject")
