@@ -1308,18 +1308,24 @@ def main():
         if 'pending_installment' in st.session_state:
             extracted = st.session_state['pending_installment']
             
-            # Determine Quarter based on strict rules
             try:
-                dt_obj = datetime.strptime(extracted['date'], "%Y-%m-%d")
-                m = dt_obj.month
-                if m in [4, 5, 6]: q_str = "Q1"
-                elif m in [7, 8, 9]: q_str = "Q2"
-                elif m in [10, 11, 12]: q_str = "Q3"
-                else: q_str = "Q4"
+                dt_obj = datetime.strptime(extracted.get('date', str(date.today())), "%Y-%m-%d")
             except:
-                q_str = "Unknown Quarter"
+                dt_obj = date.today()
                 
-            st.info(f"📅 **Date:** {extracted.get('date')} | 🕒 **Quarter:** {q_str} | 🔢 **Installment:** {extracted.get('installment_number')} | 🎯 **Purpose:** {extracted.get('purpose')} | 🆔 **PFMS ID:** {extracted.get('pfms_transaction_id')}")
+            st.write("✏️ **Step 1: Edit Installment Details (Fix any AI extraction errors here):**")
+            mc1, mc2, mc3, mc4 = st.columns(4)
+            edit_date = mc1.date_input("Date", dt_obj)
+            edit_inst_no = mc2.text_input("Inst No. (e.g. I, II)", extracted.get('installment_number', ''))
+            edit_purpose = mc3.text_input("Purpose", extracted.get('purpose', ''))
+            edit_pfms_id = mc4.text_input("PFMS ID", extracted.get('pfms_transaction_id', ''))
+            
+            # Recalculate quarter based on edited date
+            m = edit_date.month
+            if m in [4, 5, 6]: q_str = "Q1"
+            elif m in [7, 8, 9]: q_str = "Q2"
+            elif m in [10, 11, 12]: q_str = "Q3"
+            else: q_str = "Q4"
             
             # Prepare dataframe for editing
             inst_dict = {h: 0.0 for h in BUDGET_HEADS}
@@ -1339,42 +1345,48 @@ def main():
             df_data = [{"Budget Head": k, "Amount (₹)": v} for k, v in inst_dict.items()]
             df = pd.DataFrame(df_data)
             
-            st.write("✏️ **Review and Edit Installment Amounts:**")
+            st.write("✏️ **Step 2: Review and Edit Installment Amounts:**")
             edited_df = st.data_editor(df, use_container_width=True, hide_index=True, key="inst_editor")
             
             total_amt = edited_df["Amount (₹)"].astype(float).sum()
             st.markdown(f"**Total Installment Amount:** ₹{total_amt:,.2f}")
             
-            if st.button("💾 Save Installment"):
-                final_heads = {row["Budget Head"]: float(row["Amount (₹)"]) for _, row in edited_df.iterrows()}
-                
-                new_inst = {
-                    "date": extracted.get('date'),
-                    "quarter": q_str,
-                    "installment_num": extracted.get('installment_number'),
-                    "purpose": extracted.get('purpose'),
-                    "pfms_id": extracted.get('pfms_transaction_id'),
-                    "amount": total_amt, 
-                    "heads": final_heads,
-                    "type": extracted.get('installment_number', 'I'), 
-                    "available": False
-                }
-                
-                if not any(inst.get('pfms_id') == new_inst['pfms_id'] for inst in data['installments']):
-                    data['installments'].append(new_inst)
-                    save_data(data, selected_fy)
+            col_save, col_cancel = st.columns([1, 4])
+            with col_save:
+                if st.button("💾 Save Installment"):
+                    final_heads = {row["Budget Head"]: float(row["Amount (₹)"]) for _, row in edited_df.iterrows()}
                     
-                    # Save PDFs locally
-                    email_path = f"documents/{selected_fy}_Inst_{new_inst['pfms_id']}_Email.pdf"
-                    pfms_path = f"documents/{selected_fy}_Inst_{new_inst['pfms_id']}_PFMS.pdf"
-                    with open(email_path, "wb") as f: f.write(email_file.getvalue())
-                    with open(pfms_path, "wb") as f: f.write(pfms_file.getvalue())
+                    new_inst = {
+                        "date": edit_date.strftime("%Y-%m-%d"),
+                        "quarter": q_str,
+                        "installment_num": edit_inst_no,
+                        "purpose": edit_purpose,
+                        "pfms_id": edit_pfms_id,
+                        "amount": total_amt, 
+                        "heads": final_heads,
+                        "type": edit_inst_no, 
+                        "available": False
+                    }
                     
-                    st.toast("Installment Saved and Backed up!")
+                    if not any(inst.get('pfms_id') == new_inst['pfms_id'] for inst in data['installments']):
+                        data['installments'].append(new_inst)
+                        save_data(data, selected_fy)
+                        
+                        # Save PDFs locally
+                        email_path = f"documents/{selected_fy}_Inst_{new_inst['pfms_id']}_Email.pdf"
+                        pfms_path = f"documents/{selected_fy}_Inst_{new_inst['pfms_id']}_PFMS.pdf"
+                        with open(email_path, "wb") as f: f.write(email_file.getvalue())
+                        with open(pfms_path, "wb") as f: f.write(pfms_file.getvalue())
+                        
+                        st.toast("Installment Saved and Backed up!")
+                        del st.session_state['pending_installment']
+                        st.rerun()
+                    else:
+                        st.warning("An installment with this PFMS ID already exists.")
+            with col_cancel:
+                if st.button("❌ Cancel"):
                     del st.session_state['pending_installment']
                     st.rerun()
-                else:
-                    st.warning("An installment with this PFMS ID already exists.")
                     
         # Display existing installments
         st.divider()
