@@ -29,12 +29,6 @@
     ],
     "expenditure": [
         {
-            "date": "2026-05-31",
-            "head": "Pay and Allowances",
-            "detail": "Dr. Vaibhav Salary ",
-            "amount": 133468.0
-        },
-        {
             "date": "2026-04-16",
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Farm labor: 06/04/2026 to 15/04/2026 ",
