@@ -742,6 +742,8 @@ def generate_auc_certificate(inst_data, t1_data, t2_data, cert_text_1, fy_string
     for section in doc.sections:
         section.left_margin = Inches(0.5)
         section.right_margin = Inches(0.5)
+        section.top_margin = Inches(0.4)     # <--- REDUCED TOP MARGIN
+        section.bottom_margin = Inches(0.4)  # <--- REDUCED BOTTOM MARGIN
     
     # Force Times New Roman Font globally
     style = doc.styles['Normal']
