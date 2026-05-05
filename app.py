@@ -1938,7 +1938,12 @@ def main():
                                 if 'opening_balances' not in data:
                                     data['opening_balances'] = {}
                                 for k in ["Establishment Charges", "TA", "Contingencies", "TSP", "Equipments", "Works"]:
-                                    data['opening_balances'][k] = float(extracted_bals.get(k) or 0.0)
+                                    ext_val = float(extracted_bals.get(k) or 0.0)
+                                    data['opening_balances'][k] = ext_val
+                                    
+                                    # ---> FIX: Force Streamlit to visually update the Tab 5 input boxes <---
+                                    st.session_state[f"ob_input_{k}_{selected_fy}"] = ext_val
+                                    
                                 save_data(data, selected_fy)
                                 st.success("Balances extracted and sent to Tab 5 SOE!")
                     else:
