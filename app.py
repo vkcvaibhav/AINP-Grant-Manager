@@ -2238,62 +2238,110 @@ def main():
                     fw_doc = generate_auc_forwarding_docx(ref_no, letter_date, subj, body)
                     st.download_button("Download Forwarding Letter (.docx)", data=fw_doc, file_name=f"AUC_Forwarding_Letter_{selected_fy}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key="auc_final_dl_btn")
 
-    # --- TAB 7: AI CHATBOT ---
-    with tabs[7]:  # <--- MAKE SURE THIS IS CHANGED TO 7
-        st.header("Grant Smart-Assistant")
-        st.write("Ask questions like: *'How much is remaining in ORC Recurring?'* or *'Generate a summary of spend for Quarter 3'*.")
+   # --- TAB 7: AI CHATBOT ---
+    with tabs[7]:
+        st.header("🧠 Advanced Grant Assistant & Report Generator")
+        st.write("Ask questions about your grant, or **upload University guidelines, Excel data, or PDFs** to extract information and automatically generate reports.")
 
+        # 1. Knowledge Base Uploader
+        with st.expander("📂 Upload Documents for Context (PDF, Excel, CSV, Word)", expanded=False):
+            st.info("Upload files here, then ask the chatbot to analyze them, summarize rules, or generate a specific report based on their contents.")
+            chat_files = st.file_uploader("Upload reference files", type=['pdf', 'xlsx', 'csv', 'docx'], accept_multiple_files=True, key="chat_uploader")
+
+        # 2. Financial Context Setup
         budget_summary = data['revised_allocation'] if data['revised_allocation'] else data['allocation']
         received_summary = sum(inst['amount'] for inst in data['installments'])
         
-        # Safe loading for chatbot
         df_exp = pd.DataFrame(data.get('expenditure', []))
         spend_summary = {}
         if not df_exp.empty:
             spend_summary = df_exp.groupby('head')['amount'].sum().to_dict()
             
         system_context = f"""
-        You are a smart financial assistant for Dr. Vaibhav Chaudhari, managing the AINP on Agricultural Acarology grant at NAU Navsari.
+        You are an elite financial assistant and report writer for Dr. Vaibhav Chaudhari, managing the AINP on Agricultural Acarology grant at NAU Navsari.
         The current Financial Year is {selected_fy}.
         Total Funds Received from ICAR: ₹{received_summary:,}
+        Budget Allocation Summary: {json.dumps(budget_summary)}
+        Current Expenditure by Head: {json.dumps(spend_summary)}
         
-        Budget Head Allocation Summary: {json.dumps(budget_summary, indent=2)}
-        Current Expenditure Totals per Head: {json.dumps(spend_summary, indent=2)}
-        
-        You have context about the budget, installments received (PFMS), and expenditures added.
-        Answer user questions robustly, calculating remaining balances where needed (Allocation - Spend).
-        If the user asks for a report, summarize the data clearly in Markdown table format.
+        INSTRUCTIONS:
+        1. Answer user questions robustly, calculating remaining balances where needed (Allocation - Spend).
+        2. If the user asks to generate a report or summary, format it highly professionally using Markdown tables, bold headers, and bullet points.
+        3. If the user has provided uploaded files, prioritize extracting the exact rules, guidelines, or data they request from those files.
         """
 
+        # 3. Initialize Chat History in Session State
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
+        # Display UI Chat History
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        if prompt := st.chat_input("Ask about grant status..."):
+        # 4. Handle User Prompt
+        if prompt := st.chat_input("Ask about grant status, or type 'Generate a report based on the uploaded file' ..."):
+            
+            # Display user message
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
 
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
-                full_response = ""
                 
-                try:
-                    chat = model_pro.start_chat(history=[])
-                    chat.send_message(f"SYSTEM_CONTEXT_DO_NOT_REPLY: {system_context}")
-                    
-                    response = chat.send_message(prompt)
-                    full_response = response.text
-                except Exception as e:
-                    full_response = f"Sorry, AI service is currently unavailable. Error: {e}"
+                with st.spinner("Analyzing data and generating response..."):
+                    try:
+                        # --- FIX: Give Gemini true conversational memory ---
+                        gemini_history = []
+                        for msg in st.session_state.messages[:-1]: # Exclude the current prompt
+                            role = "model" if msg["role"] == "assistant" else "user"
+                            gemini_history.append({"role": role, "parts": [msg["content"]]})
+                        
+                        chat = model_pro.start_chat(history=gemini_history)
+                        
+                        # --- Prepare the current message payload ---
+                        message_parts = [f"SYSTEM CONTEXT:\n{system_context}\n\nUSER PROMPT:\n{prompt}"]
+                        
+                        # --- SMART FILE PROCESSING ---
+                        if chat_files:
+                            for file in chat_files:
+                                ext = file.name.split('.')[-1].lower()
+                                
+                                # Process PDFs natively through Gemini
+                                if ext == 'pdf':
+                                    message_parts.append({"mime_type": "application/pdf", "data": file.getvalue()})
+                                    
+                                # Extract text from Word Docs using python-docx
+                                elif ext == 'docx':
+                                    try:
+                                        doc = Document(io.BytesIO(file.getvalue()))
+                                        doc_text = "\n".join([p.text for p in doc.paragraphs])
+                                        message_parts.append(f"\n--- Content of {file.name} ---\n{doc_text}\n---")
+                                    except Exception:
+                                        message_parts.append(f"[Could not extract text from Word Doc: {file.name}]")
+                                        
+                                # Extract data from Excel/CSV using Pandas
+                                elif ext in ['xlsx', 'csv']:
+                                    try:
+                                        df = pd.read_csv(file) if ext == 'csv' else pd.read_excel(file)
+                                        csv_string = df.to_csv(index=False)
+                                        message_parts.append(f"\n--- Tabular Data from {file.name} ---\n{csv_string}\n---")
+                                    except Exception:
+                                        message_parts.append(f"[Could not extract table data from {file.name}]")
 
+                        # Send the massive combined payload to Gemini
+                        response = chat.send_message(message_parts)
+                        full_response = response.text
+                        
+                    except Exception as e:
+                        full_response = f"Sorry, the AI service encountered an error. Error details: {e}"
+
+                # Stream the response to the UI
                 message_placeholder.markdown(full_response)
             
+            # Save assistant response to memory
             st.session_state.messages.append({"role": "assistant", "content": full_response})
-
 # --- 4. RUN APPLICATION ---
 if __name__ == "__main__":
     if NAU_LOGO and ICAR_LOGO:
