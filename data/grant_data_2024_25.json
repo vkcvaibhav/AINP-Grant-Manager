@@ -1,0 +1,33 @@
+{
+    "financial_year": "2024-25",
+    "allocation": {},
+    "revised_allocation": {},
+    "quarterly_allocations": {
+        "Q1": {},
+        "Q2": {},
+        "Q3": {},
+        "Q4": {}
+    },
+    "installments": [
+        {
+            "date": "2026-04-16",
+            "quarter": "Q1",
+            "installment_num": "N/A",
+            "purpose": "GIA-Salary",
+            "pfms_id": "IDIBR52026041601672704",
+            "amount": 250000.0,
+            "heads": {
+                "Pay and Allowances": 250000.0,
+                "Travelling Allowances (TA)": 0.0,
+                "Other Recurring Contingencies (ORC)": 0.0,
+                "Non-Recurring Contingencies (Equipments/Works)": 0.0,
+                "TSP": 0.0
+            },
+            "type": "N/A",
+            "available": false
+        }
+    ],
+    "expenditure": [],
+    "latest_quarter": "Full Year",
+    "latest_date": "N/A"
+}
