@@ -1588,16 +1588,62 @@ def main():
         
         comp_file = st.file_uploader("Upload Comptroller Office Order PDF", type=['pdf'], key="comp_up")
         
-        inst_to_activate = st.selectbox("This order relates to installment:", [inst['type'] for inst in data['installments']], key="act_type")
+        # 1. Multi-select allows activating multiple installments at once
+        available_insts = [inst['type'] for inst in data.get('installments', []) if "State Share" not in inst.get('type', '')]
+        insts_to_activate = st.multiselect("This order relates to installment(s):", available_insts, key="act_type_multi")
+
+        # 2. Toggle to automatically calculate and inject the 25% State Share
+        add_state_share = st.checkbox("Automatically generate and add the matching 25% State Share", value=True, help="Calculates 25% matching funds for non-TSP heads based on the 75% ICAR PFMS receipt.")
 
         if comp_file and st.button("Verify and Activate Funds"):
-            with st.spinner("Activating..."):
-                for inst in data['installments']:
-                    if inst['type'] == inst_to_activate:
-                        inst['available'] = True
-                        inst['comptroller_order_uploaded'] = True
-                save_data(data, selected_fy)
-                st.success(f"Funds for Installment {inst_to_activate} are now READY FOR UTILIZATION.")
+            if not insts_to_activate:
+                st.warning("Please select at least one installment to activate.")
+            else:
+                with st.spinner("Activating Funds and Calculating State Share..."):
+                    new_state_shares = []
+                    
+                    for inst in data['installments']:
+                        # Check if selected and not already activated to prevent duplication
+                        if inst['type'] in insts_to_activate and not inst.get('comptroller_order_uploaded'):
+                            inst['available'] = True
+                            inst['comptroller_order_uploaded'] = True
+                            
+                            # Calculate the 25% State Share mathematically
+                            if add_state_share:
+                                state_heads = {}
+                                state_total = 0.0
+                                
+                                for h, amt in inst.get('heads', {}).items():
+                                    # TSP is 100% ICAR, so it gets no state share match
+                                    if "TSP" not in h.upper() and amt > 0:
+                                        # If ICAR is 75%, then State is 25%. (Therefore State = ICAR / 3)
+                                        state_amt = round(float(amt) / 3.0, 2)
+                                        state_heads[h] = state_amt
+                                        state_total += state_amt
+                                
+                                # Create a separate ledger entry for the State Share
+                                if state_total > 0:
+                                    state_inst = {
+                                        "date": datetime.now().strftime("%Y-%m-%d"),
+                                        "quarter": inst.get('quarter', 'Q1'),
+                                        "installment_num": inst.get('installment_num', '') + " (State Share)",
+                                        "purpose": "State Share 25%",
+                                        "pfms_id": "STATE_MATCH_" + inst.get('pfms_id', ''),
+                                        "amount": state_total,
+                                        "heads": state_heads,
+                                        "type": inst['type'] + " (State Share)",
+                                        "available": True,
+                                        "comptroller_order_uploaded": True
+                                    }
+                                    new_state_shares.append(state_inst)
+
+                    # Append the newly created State Share records safely
+                    if new_state_shares:
+                        data['installments'].extend(new_state_shares)
+                        
+                    save_data(data, selected_fy)
+                    st.success(f"Funds for {', '.join(insts_to_activate)} are now READY! Matching State Share generated.")
+                    st.rerun()
 
 
 # --- TAB 5: MONTHLY SPEND ---
