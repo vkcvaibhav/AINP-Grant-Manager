@@ -1598,48 +1598,33 @@ def main():
         last_day = calendar.monthrange(soe_year, month_idx)[1]
         end_date = datetime(soe_year, month_idx, last_day) # Last day of selected month
 
-# 3. Setup Opening Balances Dictionary & Historical AUC Archive
+# 3. Setup Opening Balances Dictionary
         if 'opening_balances' not in data:
             data['opening_balances'] = {
                 "Establishment Charges": 0.0, "TA": 0.0, "Contingencies": 0.0, 
                 "TSP": 0.0, "Equipments": 0.0, "Works": 0.0
             }
             
-        with st.expander(f"⚙️ Set Opening Balances & Upload Old AUCs for FY {selected_fy}"):
-            st.write(f"Upload the previous year's AUC to automatically extract opening balances, or set them manually below.")
+        with st.expander(f"⚙️ Set Opening Balances for FY {selected_fy}"):
+            st.write(f"💡 **Tip:** Upload last year's signed AUC in **Tab 6** to auto-fill these balances, or edit them manually below.")
             
-            # --- NEW: Upload and Download Old AUC ---
-            col_up, col_dl = st.columns(2)
-            with col_up:
-                old_auc_file = st.file_uploader("Upload Previous Year's AUC (PDF)", type=['pdf'], key=f"auc_up_{selected_fy}")
-                if old_auc_file and st.button("Extract Balances via AI"):
-                    with st.spinner("AI is analyzing the old AUC..."):
-                        auc_prompt = {
-                            "context": "This is a previous year's Audit Utilization Certificate (AUC). Extract the 'Closing balance as on 31st March' for each specific budget head. If a balance is negative (e.g. (-) 1,38,340.60), return it as a negative number (-138340.60).",
-                            "structure": {
-                                "Establishment Charges": 0.0,
-                                "TA": 0.0,
-                                "Contingencies": 0.0,
-                                "TSP": 0.0,
-                                "Equipments": 0.0,
-                                "Works": 0.0
-                            }
-                        }
-                        extracted_bals = process_upload_with_ai(old_auc_file, auc_prompt)
-                        if extracted_bals:
-                            # Update dictionary with extracted values
-                            for k in data['opening_balances'].keys():
-                                data['opening_balances'][k] = float(extracted_bals.get(k) or 0.0)
-                            save_data(data, selected_fy)
-                            
-                            # Save PDF locally so it can be downloaded anytime
-                            pdf_path = f"documents/Old_AUC_{selected_fy}.pdf"
-                            with open(pdf_path, "wb") as f:
-                                f.write(old_auc_file.getvalue())
-                                
-                            st.success("Balances extracted and old AUC saved!")
-                            st.rerun()
-
+            with st.form(f"ob_form_{selected_fy}"):
+                cols = st.columns(3)
+                new_obs = {}
+                for idx, (k, v) in enumerate(data['opening_balances'].items()):
+                    # The unique key forces Streamlit to wipe the box clean when the FY changes
+                    new_obs[k] = cols[idx % 3].number_input(
+                        f"{k} (₹)", 
+                        value=float(v), 
+                        step=1000.0,
+                        key=f"ob_input_{k}_{selected_fy}"
+                    )
+                if st.form_submit_button("💾 Save Opening Balances"):
+                    data['opening_balances'] = new_obs
+                    save_data(data, selected_fy)
+                    st.success(f"Opening Balances manually updated for {selected_fy}!")
+                    st.rerun()
+                    
             with col_dl:
                 pdf_path = f"documents/Old_AUC_{selected_fy}.pdf"
                 if os.path.exists(pdf_path):
@@ -1940,6 +1925,62 @@ def main():
     with tabs[6]:
         st.header("Audit Utilization Certificate (AUC) & Forwarding Letter")
         st.write("Generate the final year-end AUC and its corresponding Gujarati forwarding letter.")
+        
+        # --- NEW: Historical AUC Archive (2021 to 2025) ---
+        with st.expander("📂 Historical AUC Archive & Auto-Balance Extraction", expanded=False):
+            st.write("Upload previous years' signed AUCs to maintain a digital archive. **If you upload the AUC for the strictly previous year, the AI will automatically extract the closing balances and send them to Tab 5!**")
+            
+            # Calculate what the "previous year" string should be (e.g., if 2025-26, prev is 2024-25)
+            prev_y_start = int(selected_fy.split('-')[0]) - 1
+            prev_y_end = str(prev_y_start + 1)[-2:]
+            prev_fy_string = f"{prev_y_start}-{prev_y_end}"
+            
+            archive_years = ["2021-22", "2022-23", "2023-24", "2024-25"]
+            
+            for a_year in archive_years:
+                c1, c2, c3 = st.columns([1.5, 2, 1])
+                with c1:
+                    st.markdown(f"**FY {a_year} AUC**")
+                
+                pdf_path = f"documents/AUC_Archive_{a_year}.pdf"
+                
+                with c2:
+                    up_file = st.file_uploader(f"Upload {a_year}", type=['pdf'], key=f"up_arc_{a_year}", label_visibility="collapsed")
+                    if up_file and st.button(f"Save {a_year}", key=f"btn_ext_{a_year}"):
+                        # 1. Save the file permanently
+                        with open(pdf_path, "wb") as f:
+                            f.write(up_file.getvalue())
+                        
+                        # 2. If it is the previous year, trigger the AI Extraction!
+                        if a_year == prev_fy_string:
+                            with st.spinner(f"Extracting closing balances from {a_year} to use as opening balances..."):
+                                auc_prompt = {
+                                    "context": "This is a previous year's Audit Utilization Certificate (AUC). Extract the 'Closing balance as on 31st March' for each specific budget head. If a balance is negative (e.g. (-) 1,38,340.60), return it as a negative number (-138340.60).",
+                                    "structure": {
+                                        "Establishment Charges": 0.0, "TA": 0.0, "Contingencies": 0.0,
+                                        "TSP": 0.0, "Equipments": 0.0, "Works": 0.0
+                                    }
+                                }
+                                extracted_bals = process_upload_with_ai(up_file, auc_prompt)
+                                if extracted_bals:
+                                    if 'opening_balances' not in data:
+                                        data['opening_balances'] = {}
+                                    for k in ["Establishment Charges", "TA", "Contingencies", "TSP", "Equipments", "Works"]:
+                                        data['opening_balances'][k] = float(extracted_bals.get(k) or 0.0)
+                                    save_data(data, selected_fy)
+                                    st.success(f"Balances extracted and sent to Tab 5 SOE!")
+                        else:
+                            st.success(f"Archive saved for {a_year}!")
+                        st.rerun()
+                        
+                with c3:
+                    if os.path.exists(pdf_path):
+                        with open(pdf_path, "rb") as f:
+                            st.download_button("📥 Download", data=f, file_name=f"AUC_Signed_{a_year}.pdf", mime="application/pdf", key=f"dl_arc_{a_year}")
+                    else:
+                        st.write("❌ Not Uploaded")
+        
+        st.divider()
         
         # Calculate Base Variables for the FY
         fy_start_year = int(selected_fy.split('-')[0])
