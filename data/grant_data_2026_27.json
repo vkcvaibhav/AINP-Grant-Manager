@@ -24,7 +24,22 @@
                 "TSP": 0.0
             },
             "type": "I",
-            "available": false
+            "available": true,
+            "comptroller_order_uploaded": true
+        },
+        {
+            "date": "2026-05-19",
+            "quarter": "Q1",
+            "installment_num": "I (State Share)",
+            "purpose": "State Share 25%",
+            "pfms_id": "STATE_MATCH_IDIBR52026041601672704",
+            "amount": 83333.33,
+            "heads": {
+                "Pay and Allowances": 83333.33
+            },
+            "type": "I (State Share)",
+            "available": true,
+            "comptroller_order_uploaded": true
         }
     ],
     "expenditure": [
