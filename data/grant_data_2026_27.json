@@ -40,6 +40,23 @@
             "type": "I (State Share)",
             "available": true,
             "comptroller_order_uploaded": true
+        },
+        {
+            "date": "2026-05-27",
+            "quarter": "Q1",
+            "installment_num": "II",
+            "purpose": "GIA-General",
+            "pfms_id": "C052624881622",
+            "amount": 100000.0,
+            "heads": {
+                "Pay and Allowances": 0.0,
+                "Travelling Allowances (TA)": 0.0,
+                "Other Recurring Contingencies (ORC)": 100000.0,
+                "Non-Recurring Contingencies (Equipments/Works)": 0.0,
+                "TSP": 0.0
+            },
+            "type": "II",
+            "available": false
         }
     ],
     "expenditure": [
