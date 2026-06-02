@@ -107,6 +107,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Farm labour: 01/05/2026 to 15/05/2026",
             "amount": 4554.0
+        },
+        {
+            "date": "2026-05-19",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Polyhouse ligth bill 01/04/2026 to 30/04/2026",
+            "amount": 103.0
         }
     ],
     "latest_quarter": "Full Year",
