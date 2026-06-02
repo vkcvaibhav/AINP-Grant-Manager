@@ -113,6 +113,12 @@
             "head": "Pay and Allowances",
             "detail": "Farm labor:01/05/2026 to 15/05/2026",
             "amount": 4554.0
+        },
+        {
+            "date": "2026-05-22",
+            "head": "Pay and Allowances",
+            "detail": "Dutt enterprise, Chemical purchase ",
+            "amount": 3894.0
         }
     ],
     "latest_quarter": "Full Year",
