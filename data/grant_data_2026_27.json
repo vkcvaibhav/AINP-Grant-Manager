@@ -128,5 +128,13 @@
         }
     ],
     "latest_quarter": "Full Year",
-    "latest_date": "N/A"
+    "latest_date": "N/A",
+    "opening_balances": {
+        "Establishment Charges": -370662.1,
+        "TA": 0.0,
+        "Contingencies": 0.0,
+        "TSP": 0.0,
+        "Equipments": 0.0,
+        "Works": 0.0
+    }
 }
