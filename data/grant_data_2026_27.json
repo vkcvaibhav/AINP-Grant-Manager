@@ -107,6 +107,12 @@
             "head": "Pay and Allowances",
             "detail": "\nLight bill polyhouse 2148",
             "amount": 103.0
+        },
+        {
+            "date": "2026-05-16",
+            "head": "Pay and Allowances",
+            "detail": "Farm labor:01/05/2026 to 15/05/2026",
+            "amount": 4554.0
         }
     ],
     "latest_quarter": "Full Year",
