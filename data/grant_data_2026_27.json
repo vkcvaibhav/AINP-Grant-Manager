@@ -101,6 +101,12 @@
             "head": "Pay and Allowances",
             "detail": "Devbhai salary",
             "amount": 67834.0
+        },
+        {
+            "date": "2026-05-16",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Farm labour: 01/05/2026 to 15/05/2026",
+            "amount": 4554.0
         }
     ],
     "latest_quarter": "Full Year",
