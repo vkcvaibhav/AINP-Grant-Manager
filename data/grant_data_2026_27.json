@@ -101,6 +101,12 @@
             "head": "Pay and Allowances",
             "detail": "Devbhai salary",
             "amount": 67834.0
+        },
+        {
+            "date": "2026-05-19",
+            "head": "Pay and Allowances",
+            "detail": "\nLight bill polyhouse 2148",
+            "amount": 103.0
         }
     ],
     "latest_quarter": "Full Year",
