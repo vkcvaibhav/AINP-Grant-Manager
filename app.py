@@ -288,7 +288,7 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
     # 6. Subject
     p_sub = doc.add_paragraph()
     p_sub.add_run("વિષય:- ").bold = True
-    p_sub.add_run("બ.સ. ૩૦૩/ ૨૦૯૨ અને ૩૦૩/ ૨૦૯૨/A માં ICAR – NCIPM તરફથી આવેલ ગ્રાન્ટ ફાળવવા બાબત...")
+    p_sub.add_run("બ.સ. ૩૦૩/ ૨૦૯૨ માં ICAR – NCIPM તરફથી આવેલ ગ્રાન્ટ ફાળવવા બાબત...")
     p_sub.paragraph_format.space_after = Pt(12)
     
     # 7. Body Text (With Official Letter Indentation)
@@ -1565,7 +1565,7 @@ def main():
                 <br>
                 <div><span class="bold">મારફત સવિનય:</span> આચાર્ય અને ડિનશ્રી , ન. મ. કૃષિ મહાવિદ્યાલય, ન.કૃ.યુ., નવસારી ૩૯૬ ૪૫૦</div>
                 <br>
-                <div><span class="bold">વિષય:-</span> બ.સ. ૩૦૩/ ૨૦૯૨ અને ૩૦૩/ ૨૦૯૨/A માં ICAR – NCIPM તરફથી આવેલ ગ્રાન્ટ ફાળવવા બાબત...</div>
+                <div><span class="bold">વિષય:-</span> બ.સ. ૩૦૩/ ૨૦૯૨ માં ICAR – NCIPM તરફથી આવેલ ગ્રાન્ટ ફાળવવા બાબત...</div>
                 <br>
                 <div class="justify indent">{body_text.replace(chr(10), '<br>')}</div>
                 <table class="table-custom">
