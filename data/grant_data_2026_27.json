@@ -56,7 +56,8 @@
                 "TSP": 0.0
             },
             "type": "II",
-            "available": false
+            "available": true,
+            "comptroller_order_uploaded": true
         },
         {
             "date": "2026-06-09",
