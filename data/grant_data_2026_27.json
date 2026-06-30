@@ -155,6 +155,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Vinyal sticker (size 4 x 6 inch)",
             "amount": 1320.0
+        },
+        {
+            "date": "2026-06-08",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Dutt enterprise, Cover slip 12 mm circular No.1",
+            "amount": 4248.0
         }
     ],
     "latest_quarter": "Full Year",
