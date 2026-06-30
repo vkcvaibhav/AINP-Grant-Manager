@@ -173,6 +173,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Office printer toner Refilling charge ",
             "amount": 1770.0
+        },
+        {
+            "date": "2026-06-19",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Experimental land preparation",
+            "amount": 2575.0
         }
     ],
     "latest_quarter": "Full Year",
