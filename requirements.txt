@@ -1,6 +1,5 @@
 streamlit
 google-generativeai
-PyPDF2
 pdfplumber
 Pillow
 pytesseract
@@ -8,4 +7,4 @@ pandas
 python-docx
 fpdf2
 PyGithub
-requests
+openpyxl
