@@ -12,6 +12,8 @@ import pandas as pd
 import re
 import os
 
+st.set_page_config(page_title="સાદર નોંધ જનરેટર", layout="wide")
+
 # Word Document Generation Imports
 from docx import Document
 from docx.shared import Mm, Pt, Inches
@@ -30,12 +32,45 @@ ICAR_LOGO = "logos/icar_logo.png"
 
 from github import Github
 
+
+def get_secret_value(*names, default=""):
+    """Read Streamlit secrets safely, with environment variables as a local fallback."""
+    for name in names:
+        value = None
+        try:
+            value = st.secrets.get(name)
+        except Exception:
+            value = None
+        if not value:
+            value = os.environ.get(name)
+        if value:
+            return str(value).strip()
+    return default
+
+
+DEFAULT_GITHUB_REPO = "vkcvaibhav/AINP-Grant-Manager"
+DEFAULT_STATUTE_PDF_URL = "https://raw.githubusercontent.com/vkcvaibhav/Nodh-maker-/main/121_Statutes.pdf"
+DEFAULT_SAMPLE_NONDH_URL = "https://raw.githubusercontent.com/vkcvaibhav/Nodh-maker-/main/sample_nondh.docx"
+
+GEMINI_MAIN_MODEL = get_secret_value("GEMINI_MAIN_MODEL", "GEMINI_GENERATION_MODEL", default="gemini-3.1-pro-preview")
+GEMINI_LIGHT_MODEL = get_secret_value("GEMINI_LIGHT_MODEL", "GEMINI_FLASH_LITE_MODEL", default="gemini-3.1-flash-lite")
+GEMINI_HEAVY_MODEL = get_secret_value("GEMINI_HEAVY_MODEL", "GEMINI_PRO_MODEL", default="gemini-3.1-pro-preview")
+STATUTE_PDF_URL = get_secret_value("STATUTE_PDF_URL", default=DEFAULT_STATUTE_PDF_URL)
+SAMPLE_NONDH_URL = get_secret_value("SAMPLE_NONDH_URL", default=DEFAULT_SAMPLE_NONDH_URL)
+
+
+def sanitize_filename(filename):
+    name = os.path.basename(str(filename or "uploaded_file")).strip()
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", name)
+    name = re.sub(r"\s+", " ", name).strip(" .")
+    return name or "uploaded_file"
+
 # ==========================================
 # GitHub Cloud Sync Engine
 # ==========================================
 def get_github_repo():
-    token = st.secrets.get("GITHUB_TOKEN")
-    repo_name = st.secrets.get("REPO_NAME", "vkcvaibhav/Nodh-maker-")
+    token = get_secret_value("GITHUB_TOKEN")
+    repo_name = get_secret_value("REPO_NAME", "GITHUB_REPO", default=DEFAULT_GITHUB_REPO)
     if not token:
         return None
     try:
@@ -69,7 +104,7 @@ def push_db_to_github():
             # Update existing file
             contents = repo.get_contents(f"data/{DB_FILE}")
             repo.update_file(contents.path, f"Auto-backup DB {datetime.datetime.now()}", content, contents.sha)
-        except:
+        except Exception:
             # Create new file if it doesn't exist
             repo.create_file(f"data/{DB_FILE}", "Initial DB backup", content)
     except Exception as e:
@@ -80,7 +115,12 @@ def push_file_to_github(file_bytes, github_path):
     repo = get_github_repo()
     if not repo: return
     try:
-        repo.create_file(github_path, f"Uploaded {github_path}", file_bytes)
+        file_content = bytes(file_bytes)
+        try:
+            contents = repo.get_contents(github_path)
+            repo.update_file(contents.path, f"Updated {github_path}", file_content, contents.sha)
+        except Exception:
+            repo.create_file(github_path, f"Uploaded {github_path}", file_content)
     except Exception as e:
         print(f"Failed to push file to GitHub: {e}")
 def pull_file_from_github(github_path):
@@ -173,6 +213,11 @@ def init_db():
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                   nondh_id INTEGER, file_name TEXT, file_path TEXT, upload_date TEXT, 
                   financial_year TEXT, month TEXT, doc_type TEXT, description TEXT)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS learning_memory
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  category TEXT, title TEXT, keywords TEXT, memory_text TEXT,
+                  enabled INTEGER DEFAULT 1, created_at TEXT, updated_at TEXT)''')
                   
     # Safe Database Schema Upgrades for existing users
     try: c.execute("ALTER TABLE purchase_orders ADD COLUMN nondh_id INTEGER")
@@ -274,13 +319,14 @@ def save_file_to_vault(file_bytes, original_name, doc_type, nondh_id=None, descr
     if upload_date is None: upload_date = datetime.date.today()
     fy = get_financial_year(upload_date)
     month_str = upload_date.strftime("%B")
+    safe_original_name = sanitize_filename(original_name)
     
     safe_fy = fy.replace("-", "_")
     folder_path = os.path.join("digital_vault", safe_fy, doc_type.replace(" ", "_"))
     os.makedirs(folder_path, exist_ok=True)
     
-    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    safe_name = f"{timestamp}_{original_name}"
+    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
+    safe_name = f"{timestamp}_{safe_original_name}"
     file_path = os.path.join(folder_path, safe_name)
     
     # 1. Save locally
@@ -290,7 +336,7 @@ def save_file_to_vault(file_bytes, original_name, doc_type, nondh_id=None, descr
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("INSERT INTO digital_vault (nondh_id, file_name, file_path, upload_date, financial_year, month, doc_type, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-              (nondh_id, original_name, file_path, upload_date.strftime("%Y-%m-%d"), fy, month_str, doc_type, description))
+              (nondh_id, safe_original_name, file_path, upload_date.strftime("%Y-%m-%d"), fy, month_str, doc_type, description))
     conn.commit()
     conn.close()
     
@@ -391,6 +437,121 @@ def delete_nondh(nondh_id):
     c.execute("DELETE FROM archive WHERE id = ?", (nondh_id,))
     conn.commit()
     conn.close()
+
+
+LEARNING_MEMORY_CATEGORIES = [
+    "General Preference",
+    "Nondh Wording",
+    "Statute Item",
+    "Vendor Preference",
+    "Bill/Payment",
+    "Search Hint",
+    "Other",
+]
+
+
+def extract_nondh_subject(content):
+    for line in str(content or "").splitlines():
+        if "વિષય:" in line:
+            return line.replace("વિષય:", "", 1).strip() or "No Subject"
+    return "No Subject"
+
+
+def save_learning_memory(category, title, keywords, memory_text, enabled=True, memory_id=None):
+    now = datetime.datetime.now().isoformat(timespec="seconds")
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    if memory_id:
+        c.execute(
+            """UPDATE learning_memory
+               SET category = ?, title = ?, keywords = ?, memory_text = ?,
+                   enabled = ?, updated_at = ?
+               WHERE id = ?""",
+            (category, title, keywords, memory_text, 1 if enabled else 0, now, memory_id),
+        )
+    else:
+        c.execute(
+            """INSERT INTO learning_memory
+               (category, title, keywords, memory_text, enabled, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (category, title, keywords, memory_text, 1 if enabled else 0, now, now),
+        )
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+
+
+def get_learning_memories(include_disabled=False):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    query = "SELECT id, category, title, keywords, memory_text, enabled, created_at, updated_at FROM learning_memory"
+    params = []
+    if not include_disabled:
+        query += " WHERE enabled = ?"
+        params.append(1)
+    query += " ORDER BY updated_at DESC, id DESC"
+    c.execute(query, tuple(params))
+    data = c.fetchall()
+    conn.close()
+    return data
+
+
+def set_learning_memory_enabled(memory_id, enabled):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute(
+        "UPDATE learning_memory SET enabled = ?, updated_at = ? WHERE id = ?",
+        (1 if enabled else 0, datetime.datetime.now().isoformat(timespec="seconds"), memory_id),
+    )
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+
+
+def delete_learning_memory(memory_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM learning_memory WHERE id = ?", (memory_id,))
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+
+
+def get_matching_learning_memories(query_text, limit=6):
+    query = str(query_text or "").strip().lower()
+    query_terms = [
+        term for term in re.split(r"[\s,;|/()]+", query.translate(GUJARATI_DIGIT_TRANS))
+        if len(term) >= 3
+    ]
+    if not query_terms:
+        return []
+
+    matches = []
+    for memory in get_learning_memories(include_disabled=False):
+        memory_id, category, title, keywords, memory_text, enabled, created_at, updated_at = memory
+        haystack = f"{category} {title} {keywords} {memory_text}".lower().translate(GUJARATI_DIGIT_TRANS)
+        keyword_phrases = [k.strip().lower().translate(GUJARATI_DIGIT_TRANS) for k in re.split(r"[,;|]", keywords or "") if k.strip()]
+        score = sum(2 for phrase in keyword_phrases if phrase and phrase in query)
+        score += sum(1 for term in query_terms if term in haystack)
+        if score:
+            matches.append((score, memory))
+
+    matches.sort(key=lambda item: (-item[0], item[1][0]))
+    return [memory for _, memory in matches[:limit]]
+
+
+def format_learning_memory_context(query_text):
+    memories = get_matching_learning_memories(query_text)
+    if not memories:
+        return "No matching user-saved learning memories."
+
+    lines = ["LEARNED MEMORY (user-approved preferences and corrections):"]
+    for _, category, title, keywords, memory_text, enabled, created_at, updated_at in memories:
+        clean_text = str(memory_text or "").strip()
+        if len(clean_text) > 1200:
+            clean_text = clean_text[:1200] + "..."
+        lines.append(f"- [{category}] {title} | Keywords: {keywords}\n  {clean_text}")
+    return "\n".join(lines)
 init_db()
 
 # ==========================================
@@ -400,17 +561,16 @@ init_db()
 def load_permanent_context():
     statute_text = "Statute 121 Rules:\n"
     sample_text = "Sample Nondh Format:\n"
-    pdf_url = "https://raw.githubusercontent.com/vkcvaibhav/Nodh-maker-/main/121_Statutes.pdf"
-    docx_url = "https://raw.githubusercontent.com/vkcvaibhav/Nodh-maker-/main/sample_nondh.docx"
     try:
-        r_pdf = requests.get(pdf_url)
+        r_pdf = requests.get(STATUTE_PDF_URL, timeout=25)
         if r_pdf.status_code == 200:
             f = io.BytesIO(r_pdf.content)
             reader = PyPDF2.PdfReader(f)
-            for page in reader.pages: statute_text += page.extract_text() + "\n"
+            for page in reader.pages:
+                statute_text += (page.extract_text() or "") + "\n"
     except Exception: pass
     try:
-        r_docx = requests.get(docx_url)
+        r_docx = requests.get(SAMPLE_NONDH_URL, timeout=25)
         if r_docx.status_code == 200:
             f = io.BytesIO(r_docx.content)
             doc = DocxReader(f)
@@ -1252,18 +1412,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
 # ==========================================
 # Streamlit App UI
 # ==========================================
-st.set_page_config(page_title="સાદર નોંધ જનરેટર", layout="wide")
 st.title("સાદર નોંધ જનરેટર (Intelligent Sadar Nondh App)")
-
-def get_secret_value(*names):
-    for name in names:
-        try:
-            value = st.secrets.get(name)
-        except Exception:
-            value = None
-        if value:
-            return str(value).strip()
-    return ""
 
 api_key = get_secret_value(
     "GEMINI_API_KEY",
@@ -1277,14 +1426,14 @@ else:
     api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
     st.sidebar.caption('For Streamlit Cloud, add GEMINI_API_KEY = "your_key" in App settings > Secrets.')
 
-# --- ADDED TAB 6 ---
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "નવી સાદર નોંધ (Create)", 
     "જુની નોંધ (Archives)", 
     "ખરીદી હુકમ (Purchase Order)",
     "બિલ પેમેન્ટ (Bill Payment)",
     "બિલ પેસ્ટિંગ (Bill Pasting)",
-    "🗄️ ડિજિટલ આર્કાઇવ (Digital Vault)"  # <-- NEW TAB
+    "🗄️ ડિજિટલ આર્કાઇવ (Digital Vault)",
+    "🧠 Learning Memory",
 ])
 
 with tab1:
@@ -1304,18 +1453,25 @@ with tab1:
             with st.spinner("સ્ટેચ્યુટ ૧૨૧ ની ચકાસણી અને નોંધ તૈયાર કરવામાં આવી રહી છે..."):
                 try:
                     statute_context, sample_context = load_permanent_context()
+                    memory_query = text_prompt or (uploaded_image.name if uploaded_image else "")
+                    learned_memory_context = format_learning_memory_context(memory_query)
                     
                     genai.configure(api_key=api_key)
-                    model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+                    model = genai.GenerativeModel(GEMINI_MAIN_MODEL)
                     
                     sys_prompt = f"""
                     You are an expert administrative AI for the Department of Entomology, N. M. College of Agriculture, NAU, Navsari.
                     Your task is to generate a formal 'સાદર નોંધ' in Gujarati.
+                    If relevant, apply the user-approved learned memories below. The user's current request always wins if there is a conflict.
                     
                     [CONTEXT START]
                     {statute_context[:15000]}
                     {sample_context}
                     [CONTEXT END]
+
+                    [LEARNED MEMORY START]
+                    {learned_memory_context}
+                    [LEARNED MEMORY END]
 
                     Format REQUIRED:
                     તા. {datetime.date.today().strftime('%d/%m/%Y')}
@@ -1443,7 +1599,8 @@ with tab1:
         
         # Re-stitch using the custom markdown generator that handles the Grand Total
         final_document = f"{edit_pre}\n\n{df_to_markdown_with_total(edited_df)}\n{edit_post}" if not edited_df.empty else f"{edit_pre}\n\n{edit_post}"
-        
+        current_subject = extract_nondh_subject(final_document)
+
         st.markdown("---")
         st.markdown("### દસ્તાવેજ પ્રીવ્યુ (Visual Preview - 20/80 Layout)")
         
@@ -1451,16 +1608,49 @@ with tab1:
             prev_blank, prev_content = st.columns([2, 8]) 
             with prev_content:
                 st.markdown(final_document)
+
+        with st.expander("🧠 Save this as learning memory", expanded=False):
+            mem_col1, mem_col2 = st.columns(2)
+            with mem_col1:
+                draft_memory_category = st.selectbox(
+                    "Memory category",
+                    LEARNING_MEMORY_CATEGORIES,
+                    key="draft_memory_category",
+                )
+                draft_memory_title = st.text_input(
+                    "Memory title",
+                    value=current_subject,
+                    key="draft_memory_title",
+                )
+            with mem_col2:
+                draft_memory_keywords = st.text_input(
+                    "Matching keywords",
+                    value=current_subject,
+                    key="draft_memory_keywords",
+                )
+            draft_memory_text = st.text_area(
+                "What should the app remember?",
+                value=f"When a future request matches these keywords, prefer this approved wording/correction:\n{final_document[:3000]}",
+                height=180,
+                key="draft_memory_text",
+            )
+            if st.button("🧠 Save this as learning memory", key="save_draft_learning_memory"):
+                if not draft_memory_title.strip() or not draft_memory_text.strip():
+                    st.error("Please add a title and memory text before saving.")
+                else:
+                    save_learning_memory(
+                        draft_memory_category,
+                        draft_memory_title.strip(),
+                        draft_memory_keywords.strip(),
+                        draft_memory_text.strip(),
+                    )
+                    st.success("Learning memory saved.")
         
         st.markdown("---")
         col_save, col_down = st.columns(2)
         with col_save:
             if st.button("આર્કાઇવમાં સેવ કરો (Save Nondh)"):
-                subj = "No Subject"
-                for line in final_document.split('\n'):
-                    if "વિષય:" in line:
-                        subj = line.replace("વિષય:", "").strip()
-                        break
+                subj = current_subject
                 
                 # Save Nondh to DB and get the ID
                 nondh_id = save_to_db(subj, final_document)
@@ -1507,7 +1697,8 @@ with tab2:
         
         # Using a fast model for search
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-3.1-pro-preview')
+        model = genai.GenerativeModel(GEMINI_HEAVY_MODEL)
+        learned_memory_context = format_learning_memory_context(query)
         
         records_context = ""
         for i, record in enumerate(records):
@@ -1530,6 +1721,8 @@ with tab2:
         You are an intelligent bilingual search engine (English <-> Gujarati).
         The user is searching for: "{query}"
         
+        User-approved learned memory that may help interpret this search:
+        {learned_memory_context}
         Your Task: Find all record IDs that semantically match the user's query.
         - If the query is in English (e.g., "chemicals", "pins", "equipment"), translate the intent and find the matching Gujarati records.
         - If the query is in Gujarati, find the exact or contextually matching records.
@@ -1755,7 +1948,7 @@ with tab4:
                                 import json
                                 import re  # ટેક્સ્ટ સાફ કરવા માટે
                                 genai.configure(api_key=api_key)
-                                model = genai.GenerativeModel('gemini-3.1-pro-preview') 
+                                model = genai.GenerativeModel(GEMINI_HEAVY_MODEL)
                                 
                                 prompt = f"""
                                 You are an intelligent accounting AI. The approved Purchase Order (PO) amount for this transaction is ₹{amt}.
@@ -1807,7 +2000,7 @@ with tab4:
                             with st.spinner("Converting to words..."):
                                 try:
                                     genai.configure(api_key=api_key)
-                                    model = genai.GenerativeModel('gemini-3.1-pro-preview')
+                                    model = genai.GenerativeModel(GEMINI_HEAVY_MODEL)
                                     prompt = f"Convert the number {final_amt} into English words (capitalize the first letter of each word). Return ONLY the text, nothing else. Example: for 3956.50 return 'Three Thousand Nine Hundred Fifty Six And Fifty Paise'."
                                     res = model.generate_content(prompt)
                                     st.session_state.ext_words = res.text.strip()
@@ -1883,7 +2076,7 @@ with tab5:
                     if not key or amount == 0: return ""
                     try:
                         genai.configure(api_key=key)
-                        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+                        model = genai.GenerativeModel(GEMINI_LIGHT_MODEL)
                         prompt = f"Translate the number {amount} into Gujarati words. Return ONLY the Gujarati translation. Example: for 3956 return 'ત્રણ હજાર નવસો છપ્પન'."
                         res = model.generate_content(prompt)
                         return res.text.strip()
@@ -2088,3 +2281,86 @@ with tab6:
                                     except: pass
                                 st.error(f"ફાઈલ '{f_name}' રદ કરવામાં આવી છે!")
                                 st.rerun()
+
+with tab7:
+    st.markdown("### 🧠 Learning Memory")
+
+    with st.expander("➕ Add Memory", expanded=True):
+        with st.form("add_learning_memory_form"):
+            add_col1, add_col2 = st.columns(2)
+            with add_col1:
+                new_memory_category = st.selectbox("Category", LEARNING_MEMORY_CATEGORIES, key="new_memory_category")
+                new_memory_title = st.text_input("Title", key="new_memory_title")
+            with add_col2:
+                new_memory_keywords = st.text_input("Matching keywords", key="new_memory_keywords")
+                new_memory_enabled = st.checkbox("Enabled", value=True, key="new_memory_enabled")
+            new_memory_text = st.text_area("Memory text", height=160, key="new_memory_text")
+            if st.form_submit_button("Save Memory"):
+                if not new_memory_title.strip() or not new_memory_text.strip():
+                    st.error("Please enter a title and memory text.")
+                else:
+                    save_learning_memory(
+                        new_memory_category,
+                        new_memory_title.strip(),
+                        new_memory_keywords.strip(),
+                        new_memory_text.strip(),
+                        new_memory_enabled,
+                    )
+                    st.success("Learning memory saved.")
+                    st.rerun()
+
+    memories = get_learning_memories(include_disabled=True)
+    st.markdown("#### Saved Memories")
+    if not memories:
+        st.info("No learning memories saved yet.")
+    else:
+        for memory in memories:
+            memory_id, category, title, keywords, memory_text, enabled, created_at, updated_at = memory
+            status_label = "Enabled" if enabled else "Disabled"
+            with st.expander(f"#{memory_id} | {status_label} | {title}", expanded=False):
+                edit_col1, edit_col2 = st.columns(2)
+                with edit_col1:
+                    category_index = LEARNING_MEMORY_CATEGORIES.index(category) if category in LEARNING_MEMORY_CATEGORIES else 0
+                    edit_category = st.selectbox(
+                        "Category",
+                        LEARNING_MEMORY_CATEGORIES,
+                        index=category_index,
+                        key=f"memory_category_{memory_id}",
+                    )
+                    edit_title = st.text_input("Title", value=title, key=f"memory_title_{memory_id}")
+                with edit_col2:
+                    edit_keywords = st.text_input("Matching keywords", value=keywords or "", key=f"memory_keywords_{memory_id}")
+                    st.caption(f"Created: {created_at or '-'} | Updated: {updated_at or '-'}")
+                edit_memory_text = st.text_area(
+                    "Memory text",
+                    value=memory_text or "",
+                    height=180,
+                    key=f"memory_text_{memory_id}",
+                )
+
+                action_col1, action_col2, action_col3 = st.columns(3)
+                with action_col1:
+                    if st.button("Save Changes", key=f"save_memory_{memory_id}"):
+                        if not edit_title.strip() or not edit_memory_text.strip():
+                            st.error("Please enter a title and memory text.")
+                        else:
+                            save_learning_memory(
+                                edit_category,
+                                edit_title.strip(),
+                                edit_keywords.strip(),
+                                edit_memory_text.strip(),
+                                bool(enabled),
+                                memory_id=memory_id,
+                            )
+                            st.success("Learning memory updated.")
+                            st.rerun()
+                with action_col2:
+                    toggle_label = "Disable" if enabled else "Enable"
+                    if st.button(toggle_label, key=f"toggle_memory_{memory_id}"):
+                        set_learning_memory_enabled(memory_id, not bool(enabled))
+                        st.rerun()
+                with action_col3:
+                    if st.button("Delete", key=f"delete_memory_{memory_id}", type="secondary"):
+                        delete_learning_memory(memory_id)
+                        st.error("Learning memory deleted.")
+                        st.rerun()
