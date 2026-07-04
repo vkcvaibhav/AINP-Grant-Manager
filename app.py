@@ -4,7 +4,18 @@ import json
 import pandas as pd
 from datetime import datetime, date
 import calendar
-import google.generativeai as genai
+import io
+import mimetypes
+import re
+import tempfile
+import time
+import zipfile
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from google import genai
+from google.genai import types
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -13,8 +24,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.enum.section import WD_ORIENTATION
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
-from fpdf import FPDF
-import io
+from fpdf import FPDF, XPos, YPos
 from github import Github, GithubException, UnknownObjectException  # <-- Added for GitHub backups
 
 # --- 1. CONFIGURATION & SETUP ---
@@ -41,13 +51,16 @@ def get_secret_value(*names, default=""):
     return default
 
 DEFAULT_GITHUB_REPO = "vkcvaibhav/AINP-Grant-Manager"
-GEMINI_PRO_MODEL = get_secret_value("GEMINI_PRO_MODEL", "GEMINI_MAIN_MODEL", default="gemini-3.1-pro-preview")
+GEMINI_HEAVY_MODEL = get_secret_value("GEMINI_HEAVY_MODEL", "GEMINI_PRO_MODEL", "GEMINI_MAIN_MODEL", default="gemini-3.1-pro-preview")
+GEMINI_CHAT_MODEL = get_secret_value("GEMINI_CHAT_MODEL", default="gemini-3.5-flash")
+GEMINI_FAST_MODEL = get_secret_value("GEMINI_FAST_MODEL", default="gemini-3.1-flash-lite")
+GEMINI_EMBEDDING_MODEL = get_secret_value("GEMINI_EMBEDDING_MODEL", default="models/gemini-embedding-2")
+AI_KNOWLEDGE_FILE = 'data/ai_knowledge.json'
+LEARNING_MEMORY_FILE = 'data/learning_memory.json'
 
 # AI Setup
 api_key = get_secret_value("GEMINI_API_KEY", "GOOGLE_API_KEY")
-if api_key:
-    genai.configure(api_key=api_key)
-model_pro = genai.GenerativeModel(GEMINI_PRO_MODEL)
+genai_client = genai.Client(api_key=api_key) if api_key else None
 
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
@@ -65,37 +78,495 @@ BUDGET_HEADS = [
 
 # --- 2. HELPER FUNCTIONS ---
 
+class BudgetHeadExtraction(BaseModel):
+    head_name: str = ""
+    icar_share: float = 0.0
+    state_share: float = 0.0
+    total: float = 0.0
+
+
+class BudgetExtraction(BaseModel):
+    is_revision: bool = False
+    date: Optional[str] = None
+    heads: List[BudgetHeadExtraction] = Field(default_factory=list)
+
+
+class InstallmentHeadExtraction(BaseModel):
+    head_name: str = ""
+    amount: float = 0.0
+
+
+class InstallmentExtraction(BaseModel):
+    date: Optional[str] = None
+    installment_number: str = ""
+    purpose: str = ""
+    pfms_transaction_id: str = ""
+    heads: List[InstallmentHeadExtraction] = Field(default_factory=list)
+
+
+class AucBalanceExtraction(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    establishment_charges: float = Field(0.0, alias="Establishment Charges")
+    ta: float = Field(0.0, alias="TA")
+    contingencies: float = Field(0.0, alias="Contingencies")
+    tsp: float = Field(0.0, alias="TSP")
+    equipments: float = Field(0.0, alias="Equipments")
+    works: float = Field(0.0, alias="Works")
+
+
+def coerce_amount(value, default=0.0):
+    try:
+        default_value = float(default)
+    except (TypeError, ValueError):
+        default_value = 0.0
+    if value is None:
+        return default_value
+    if isinstance(value, bool):
+        return default_value
+    if isinstance(value, (int, float)):
+        try:
+            if pd.isna(value):
+                return default_value
+        except Exception:
+            pass
+        return float(value)
+    text = str(value).strip().replace(",", "")
+    match = re.search(r"-?\d+(?:\.\d+)?", text)
+    if not match:
+        return default_value
+    try:
+        return float(match.group(0))
+    except ValueError:
+        return default_value
+
+
+def safe_date_string(value, fallback=None):
+    fallback = fallback or date.today().strftime("%Y-%m-%d")
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d")
+    if isinstance(value, date):
+        return value.strftime("%Y-%m-%d")
+    if value:
+        try:
+            return pd.to_datetime(value, errors="raise").strftime("%Y-%m-%d")
+        except Exception:
+            return fallback
+    return fallback
+
+
+def parse_date(value):
+    try:
+        return datetime.strptime(safe_date_string(value), "%Y-%m-%d")
+    except Exception:
+        return None
+
+
+def get_fy_start_date(fy):
+    try:
+        return f"{int(str(fy).split('-')[0])}-04-01"
+    except Exception:
+        return date.today().strftime("%Y-%m-%d")
+
+
+def normalize_budget_map(raw_map):
+    normalized = {}
+    if not isinstance(raw_map, dict) or not raw_map:
+        return normalized
+    for head in BUDGET_HEADS:
+        values = raw_map.get(head, {})
+        if not isinstance(values, dict):
+            values = {}
+        total = coerce_amount(values.get('total'))
+        icar = coerce_amount(values.get('icar'))
+        state = coerce_amount(values.get('state'))
+        normalized[head] = {'icar': icar, 'state': state, 'total': total}
+    return normalized
+
+
+def normalize_fy_data(raw_data, fy):
+    data = get_default_data(fy)
+    if isinstance(raw_data, dict):
+        data.update(raw_data)
+    data['financial_year'] = fy
+    data['allocation'] = normalize_budget_map(data.get('allocation', {}))
+    data['revised_allocation'] = normalize_budget_map(data.get('revised_allocation', {}))
+    data['quarterly_allocations'] = data.get('quarterly_allocations') if isinstance(data.get('quarterly_allocations'), dict) else {}
+    data['quarterly_allocations'] = {
+        q: normalize_budget_map(data['quarterly_allocations'].get(q, {}))
+        for q in ["Q1", "Q2", "Q3", "Q4"]
+    }
+
+    normalized_installments = []
+    for inst in data.get('installments', []):
+        if not isinstance(inst, dict):
+            continue
+        item = dict(inst)
+        item['date'] = safe_date_string(item.get('date'), get_fy_start_date(fy))
+        item['pfms_id'] = str(item.get('pfms_id') or item.get('pfms_transaction_id') or f"UNKNOWN_{len(normalized_installments)+1}").strip()
+        item['installment_num'] = str(item.get('installment_num') or item.get('installment_number') or item.get('type') or "").strip()
+        item['type'] = str(item.get('type') or item['installment_num'] or item['pfms_id']).strip()
+        item['purpose'] = str(item.get('purpose') or "").strip()
+        item['quarter'] = item.get('quarter') if item.get('quarter') in ["Q1", "Q2", "Q3", "Q4"] else quarter_from_date(item['date'])
+        heads = item.get('heads') if isinstance(item.get('heads'), dict) else {}
+        item['heads'] = {head: coerce_amount(heads.get(head)) for head in BUDGET_HEADS}
+        item['amount'] = coerce_amount(item.get('amount'), sum(item['heads'].values()))
+        item['available'] = bool(item.get('available', False))
+        item['comptroller_order_uploaded'] = bool(item.get('comptroller_order_uploaded', False))
+        normalized_installments.append(item)
+    data['installments'] = normalized_installments
+
+    normalized_expenses = []
+    for exp in data.get('expenditure', []):
+        if not isinstance(exp, dict):
+            continue
+        item = dict(exp)
+        item['date'] = safe_date_string(item.get('date'), get_fy_start_date(fy))
+        item['head'] = str(item.get('head') or BUDGET_HEADS[0])
+        item['detail'] = str(item.get('detail') or "")
+        item['amount'] = coerce_amount(item.get('amount'))
+        item.pop('_orig_idx', None)
+        normalized_expenses.append(item)
+    data['expenditure'] = normalized_expenses
+
+    ob = data.get('opening_balances') if isinstance(data.get('opening_balances'), dict) else {}
+    data['opening_balances'] = {
+        "Establishment Charges": coerce_amount(ob.get("Establishment Charges")),
+        "TA": coerce_amount(ob.get("TA")),
+        "Contingencies": coerce_amount(ob.get("Contingencies")),
+        "TSP": coerce_amount(ob.get("TSP")),
+        "Equipments": coerce_amount(ob.get("Equipments")),
+        "Works": coerce_amount(ob.get("Works")),
+    }
+    data['latest_quarter'] = str(data.get('latest_quarter') or "Full Year")
+    data['latest_date'] = str(data.get('latest_date') or "N/A")
+    return data
+
+
+def quarter_from_date(value):
+    parsed = parse_date(value)
+    month = parsed.month if parsed else date.today().month
+    if month in [4, 5, 6]:
+        return "Q1"
+    if month in [7, 8, 9]:
+        return "Q2"
+    if month in [10, 11, 12]:
+        return "Q3"
+    return "Q4"
+
+
+def sanitize_filename(filename, default="file"):
+    name = os.path.basename(str(filename or default)).strip()
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", name)
+    name = re.sub(r"\s+", " ", name).strip(" .")
+    return name or default
+
+
+def safe_documents_path(filename):
+    safe_name = sanitize_filename(filename)
+    docs_dir = os.path.abspath("documents")
+    path = os.path.abspath(os.path.join(docs_dir, safe_name))
+    if not path.startswith(docs_dir + os.sep):
+        raise ValueError("Unsafe document path")
+    return path
+
+
+def save_uploaded_document(uploaded_file, filename):
+    path = safe_documents_path(filename)
+    with open(path, "wb") as f:
+        f.write(uploaded_file.getvalue())
+    backup_file_to_github(path)
+    return path
+
+
+def read_json_file(path, default):
+    if not os.path.exists(path):
+        return default
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return default
+
+
+def write_json_file(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    os.replace(tmp_path, path)
+    backup_file_to_github(path)
+
+
+def get_audit_filename(fy):
+    return f"data/audit_log_{fy.replace('-', '_')}.jsonl"
+
+
+def append_audit_log(fy, action, details=None):
+    entry = {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "financial_year": fy,
+        "action": action,
+        "details": details or {},
+    }
+    path = get_audit_filename(fy)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    backup_file_to_github(path)
+
+
+def read_audit_entries(fy, limit=20):
+    path = get_audit_filename(fy)
+    entries = []
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+    return list(reversed(entries[-limit:]))
+
+
+def build_fy_backup_zip(fy, data):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        data_name = get_fy_filename(fy)
+        zf.writestr(data_name, json.dumps(normalize_fy_data(data, fy), indent=4, ensure_ascii=False))
+        audit_name = get_audit_filename(fy)
+        if os.path.exists(audit_name):
+            zf.write(audit_name, audit_name)
+        for extra in [AI_KNOWLEDGE_FILE, LEARNING_MEMORY_FILE]:
+            if os.path.exists(extra):
+                zf.write(extra, extra)
+        docs_dir = Path("documents")
+        if docs_dir.exists():
+            fy_safe = fy.replace("-", "_")
+            for path in docs_dir.glob("*"):
+                if path.is_file() and (fy in path.name or fy_safe in path.name or path.name.startswith("AUC_Archive_")):
+                    zf.write(path, str(path).replace("\\", "/"))
+    buffer.seek(0)
+    return buffer
+
+
+def preview_restore_json(uploaded_file, fy):
+    try:
+        raw = uploaded_file.getvalue().decode("utf-8")
+        parsed = json.loads(raw)
+        restored = normalize_fy_data(parsed, fy)
+        return restored, None
+    except Exception as e:
+        return None, str(e)
+
+
+def pdf_to_bytes(pdf):
+    raw = pdf.output()
+    if isinstance(raw, bytearray):
+        return bytes(raw)
+    if isinstance(raw, bytes):
+        return raw
+    return raw.encode("latin-1")
+
+
+def load_ai_knowledge():
+    return read_json_file(AI_KNOWLEDGE_FILE, {"store_name": "", "display_name": "", "documents": []})
+
+
+def save_ai_knowledge(metadata):
+    write_json_file(AI_KNOWLEDGE_FILE, metadata)
+
+
+def ensure_file_search_store():
+    if genai_client is None:
+        raise RuntimeError("GEMINI_API_KEY is required for File Search.")
+    metadata = load_ai_knowledge()
+    store_name = metadata.get("store_name")
+    if store_name:
+        try:
+            genai_client.file_search_stores.get(name=store_name)
+            return metadata
+        except Exception:
+            metadata["store_name"] = ""
+    store = genai_client.file_search_stores.create(
+        config=types.CreateFileSearchStoreConfig(
+            display_name="AINP Grant Manager Knowledge Store",
+            embedding_model=GEMINI_EMBEDDING_MODEL,
+        )
+    )
+    metadata["store_name"] = store.name
+    metadata["display_name"] = getattr(store, "display_name", None) or "AINP Grant Manager Knowledge Store"
+    save_ai_knowledge(metadata)
+    return metadata
+
+
+def upload_file_to_knowledge_store(uploaded_file):
+    metadata = ensure_file_search_store()
+    original_name = sanitize_filename(uploaded_file.name, "knowledge_file")
+    mime_type = uploaded_file.type or mimetypes.guess_type(original_name)[0] or "application/octet-stream"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{original_name}") as tmp:
+        tmp.write(uploaded_file.getvalue())
+        tmp_path = tmp.name
+    try:
+        operation = genai_client.file_search_stores.upload_to_file_search_store(
+            file_search_store_name=metadata["store_name"],
+            file=tmp_path,
+            config=types.UploadToFileSearchStoreConfig(
+                display_name=original_name,
+                mime_type=mime_type,
+            ),
+        )
+        started = time.time()
+        while not operation.done and time.time() - started < 180:
+            time.sleep(3)
+            operation = genai_client.operations.get(operation)
+        doc_info = operation.model_dump(mode="json") if hasattr(operation, "model_dump") else {"name": str(operation)}
+        metadata.setdefault("documents", []).append({
+            "file_name": original_name,
+            "mime_type": mime_type,
+            "uploaded_at": datetime.now().isoformat(timespec="seconds"),
+            "operation": doc_info,
+        })
+        save_ai_knowledge(metadata)
+        return operation
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+
+def load_learning_memories():
+    raw = read_json_file(LEARNING_MEMORY_FILE, [])
+    return raw if isinstance(raw, list) else []
+
+
+def save_learning_memories(memories):
+    write_json_file(LEARNING_MEMORY_FILE, memories)
+
+
+def matching_learning_memories(prompt):
+    prompt_l = str(prompt or "").lower()
+    matches = []
+    for memory in load_learning_memories():
+        if not memory.get("enabled", True):
+            continue
+        haystack = " ".join([
+            str(memory.get("title", "")),
+            str(memory.get("keywords", "")),
+            str(memory.get("memory_text", "")),
+        ]).lower()
+        keywords = [k.strip().lower() for k in str(memory.get("keywords", "")).split(",") if k.strip()]
+        if any(k in prompt_l for k in keywords) or any(word and word in prompt_l for word in str(memory.get("title", "")).lower().split()):
+            matches.append(memory)
+        elif not keywords and haystack and any(word in haystack for word in prompt_l.split()[:8]):
+            matches.append(memory)
+    return matches[:5]
+
+
+def extract_file_search_citations(response):
+    citations = []
+    for candidate in response.candidates or []:
+        metadata = getattr(candidate, "grounding_metadata", None)
+        if not metadata or not metadata.grounding_chunks:
+            continue
+        for chunk in metadata.grounding_chunks:
+            chunk_data = chunk.model_dump(mode="json") if hasattr(chunk, "model_dump") else {}
+            citations.append(chunk_data)
+    return citations
+
 # --- A. Data Persistence & GitHub Backup ---
-def backup_to_github(filepath, content_str):
-    """Pushes saved data back to GitHub so it isn't lost when Streamlit sleeps."""
+def get_github_repo():
     github_token = get_secret_value("GITHUB_TOKEN")
     repo_name = get_secret_value("GITHUB_REPO", "REPO_NAME", default=DEFAULT_GITHUB_REPO)
-    
     if not github_token:
+        return None
+    g = Github(github_token)
+    return g.get_repo(repo_name)
+
+
+def backup_to_github(filepath, content):
+    """Pushes saved data back to GitHub so it isn't lost when Streamlit sleeps."""
+    if not get_secret_value("GITHUB_TOKEN"):
         # If no token is found, just skip the backup (useful for local testing)
         return
 
     try:
-        g = Github(github_token)
-        repo = g.get_repo(repo_name)
+        repo = get_github_repo()
+        if repo is None:
+            return
         
         # Check if the file already exists in GitHub
         try:
             contents = repo.get_contents(filepath)
         except UnknownObjectException:
             # If it does not exist yet, CREATE it
-            repo.create_file(filepath, f"Auto-create {filepath}", content_str)
+            repo.create_file(filepath, f"Auto-create {filepath}", content)
         else:
             if isinstance(contents, list):
                 st.warning(f"GitHub backup skipped because {filepath} resolved to a directory.")
                 return
             # If it exists, UPDATE it
-            repo.update_file(contents.path, f"Auto-backup {filepath}", content_str, contents.sha)
+            repo.update_file(contents.path, f"Auto-backup {filepath}", content, contents.sha)
             
     except GithubException as e:
         st.warning(f"Failed to backup to GitHub. Error: {e}")
     except Exception as e:
         st.warning(f"Failed to backup to GitHub. Error: {e}")
+
+
+def backup_file_to_github(local_path, github_path=None):
+    if not get_secret_value("GITHUB_TOKEN") or not os.path.exists(local_path):
+        return
+    if github_path is None:
+        try:
+            github_path = os.path.relpath(local_path, os.getcwd())
+        except ValueError:
+            github_path = local_path
+    github_path = github_path.replace("\\", "/")
+    try:
+        mode = "rb" if not local_path.endswith((".json", ".jsonl", ".txt", ".py", ".md")) else "r"
+        if mode == "rb":
+            with open(local_path, "rb") as f:
+                content = f.read()
+        else:
+            with open(local_path, "r", encoding="utf-8") as f:
+                content = f.read()
+        backup_to_github(github_path, content)
+    except Exception as e:
+        st.warning(f"Failed to backup file to GitHub. Error: {e}")
+
+
+def pull_file_from_github(github_path, local_path):
+    if os.path.exists(local_path) or not get_secret_value("GITHUB_TOKEN"):
+        return os.path.exists(local_path)
+    try:
+        repo = get_github_repo()
+        if repo is None:
+            return False
+        contents = repo.get_contents(github_path.replace("\\", "/"))
+        if isinstance(contents, list):
+            return False
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        with open(local_path, "wb") as f:
+            f.write(contents.decoded_content)
+        return True
+    except Exception:
+        return False
+
+
+def load_document_bytes(file_path):
+    if os.path.exists(file_path):
+        with open(file_path, "rb") as f:
+            return f.read()
+    try:
+        github_path = os.path.relpath(file_path, os.getcwd()).replace("\\", "/")
+    except ValueError:
+        github_path = file_path.replace("\\", "/")
+    if pull_file_from_github(github_path, file_path):
+        with open(file_path, "rb") as f:
+            return f.read()
+    return None
 
 def get_fy_filename(fy):
     return f'data/grant_data_{fy.replace("-", "_")}.json'
@@ -117,17 +588,14 @@ def load_data(fy):
     if os.path.exists(filename):
         try:
             with open(filename, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                # Ensure new quarterly structure exists in old data files
-                if 'quarterly_allocations' not in data:
-                    data['quarterly_allocations'] = {"Q1": {}, "Q2": {}, "Q3": {}, "Q4": {}}
-                return data
+                return normalize_fy_data(json.load(f), fy)
         except (json.JSONDecodeError, OSError) as e:
             st.warning(f"Could not load {filename}; starting with a clean FY file. Error: {e}")
-    return get_default_data(fy)
+    return normalize_fy_data(get_default_data(fy), fy)
 
-def save_data(data, fy):
+def save_data(data, fy, audit_action=None, audit_details=None):
     filename = get_fy_filename(fy)
+    data = normalize_fy_data(data, fy)
     
     # 1. Save locally for immediate app use
     temp_filename = f"{filename}.tmp"
@@ -138,40 +606,53 @@ def save_data(data, fy):
     # 2. Push to GitHub for permanent backup
     json_str = json.dumps(data, indent=4, ensure_ascii=False)
     backup_to_github(filename, json_str)
+    if audit_action:
+        append_audit_log(fy, audit_action, audit_details)
 
 
 # --- B. Document Processing (AI PDF Reader) ---
-def process_upload_with_ai(uploaded_file, prompt_task):
-    """Uses Gemini to natively read the PDF and extract JSON structured data."""
+def extract_structured_with_ai(parts, prompt, schema_model):
+    if genai_client is None:
+        st.error("Please add GEMINI_API_KEY in Streamlit secrets to use AI extraction.")
+        return None
     try:
-        # Package the raw PDF file directly for Gemini
-        pdf_data = {
-            "mime_type": "application/pdf",
-            "data": uploaded_file.getvalue()
-        }
-
-        full_prompt = f"""
-        Analyze the attached document content and extract the required information 
-        as a structured JSON object.
-
-        DOCUMENT TYPE/CONTEXT: {prompt_task['context']}
-        REQUIRED JSON STRUCTURE: {json.dumps(prompt_task['structure'], indent=2)}
-
-        IMPORTANT: Only return the JSON object, nothing else. If a field cannot be found, set it to null.
-        For currency, return numbers only (e.g., 100000). Convert dates to YYYY-MM-DD format.
-        """
-        
-        # Send the text prompt and the raw PDF directly to Gemini
-        response = model_pro.generate_content([full_prompt, pdf_data])
-        
-        # Parse JSON from response (MUST BE ON ONE LINE)
-        json_str = response.text.replace('```json', '').replace('```', '').strip()
-        extracted_data = json.loads(json_str)
-        return extracted_data
-
+        response = genai_client.models.generate_content(
+            model=GEMINI_HEAVY_MODEL,
+            contents=[types.Part.from_text(text=prompt)] + parts,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=schema_model,
+            ),
+        )
+        if response.parsed is not None:
+            if isinstance(response.parsed, BaseModel):
+                return response.parsed.model_dump(by_alias=True)
+            return response.parsed
+        return schema_model.model_validate_json(response.text).model_dump(by_alias=True)
+    except (ValidationError, json.JSONDecodeError) as e:
+        st.error(f"AI returned data in an unexpected format: {e}")
+        return None
     except Exception as e:
         st.error(f"Error processing document with AI: {e}")
         return None
+
+
+def process_upload_with_ai(uploaded_file, prompt_task):
+    """Uses Gemini to natively read the PDF and extract structured data."""
+    pdf_part = types.Part.from_bytes(data=uploaded_file.getvalue(), mime_type="application/pdf")
+    structure = prompt_task.get("structure", {})
+    schema_model = BudgetExtraction if "heads" in structure else AucBalanceExtraction
+    full_prompt = f"""
+    Analyze the attached document content and extract the required information.
+
+    DOCUMENT TYPE/CONTEXT: {prompt_task['context']}
+
+    IMPORTANT:
+    - Convert dates to YYYY-MM-DD format.
+    - Convert currency values to numbers only, in absolute rupees.
+    - If a field cannot be found, set it to null or zero as appropriate.
+    """
+    return extract_structured_with_ai([pdf_part], full_prompt, schema_model)
 
 # --- C. Output Generation (PDF/WORD) ---
 def add_bottom_border(paragraph, size='24'):
@@ -934,6 +1415,61 @@ def main():
     # --- TAB 1: DASHBOARD ---
     with tabs[0]:
         st.header(f"📊 Financial Dashboard (FY {selected_fy})")
+
+        with st.expander("Backup & Audit", expanded=False):
+            audit_entries = read_audit_entries(selected_fy, limit=10)
+            col_bu1, col_bu2 = st.columns(2)
+            with col_bu1:
+                backup_buffer = build_fy_backup_zip(selected_fy, data)
+                st.download_button(
+                    "Download FY Backup ZIP",
+                    data=backup_buffer,
+                    file_name=f"AINP_Backup_{selected_fy}.zip",
+                    mime="application/zip",
+                    key=f"backup_zip_{selected_fy}",
+                )
+            with col_bu2:
+                audit_path = get_audit_filename(selected_fy)
+                audit_bytes = load_document_bytes(audit_path) if os.path.exists(audit_path) else b""
+                st.download_button(
+                    "Download Audit Log",
+                    data=audit_bytes,
+                    file_name=f"audit_log_{selected_fy}.jsonl",
+                    mime="application/jsonl",
+                    key=f"audit_log_download_{selected_fy}",
+                    disabled=not bool(audit_bytes),
+                )
+
+            if audit_entries:
+                st.write("Recent changes")
+                st.dataframe(pd.DataFrame(audit_entries), width="stretch", hide_index=True)
+            else:
+                st.info("No audit entries recorded yet.")
+
+            restore_file = st.file_uploader("Restore FY JSON backup", type=["json"], key=f"restore_json_{selected_fy}")
+            if restore_file:
+                restore_data, restore_error = preview_restore_json(restore_file, selected_fy)
+                if restore_error:
+                    st.error(f"Restore file is not valid: {restore_error}")
+                else:
+                    st.success("Restore file is valid. Preview:")
+                    st.json({
+                        "financial_year": restore_data.get("financial_year"),
+                        "installments": len(restore_data.get("installments", [])),
+                        "expenditure": len(restore_data.get("expenditure", [])),
+                        "has_allocation": bool(restore_data.get("allocation")),
+                        "has_revised_allocation": bool(restore_data.get("revised_allocation")),
+                    })
+                    confirm_restore = st.checkbox("I understand this will replace the current FY data.", key=f"confirm_restore_{selected_fy}")
+                    if st.button("Restore This FY JSON", key=f"restore_btn_{selected_fy}", disabled=not confirm_restore):
+                        save_data(
+                            restore_data,
+                            selected_fy,
+                            audit_action="restore_fy_json",
+                            audit_details={"source_file": restore_file.name},
+                        )
+                        st.success("FY data restored.")
+                        st.rerun()
         
         # --- 1. DATA PREPARATION ---
         # Get Active Allocation
@@ -941,7 +1477,7 @@ def main():
         total_allocated = sum(v.get('total', 0) for v in active_budget.values()) if active_budget else 0.0
         
         # Get Total Received
-        total_received = sum(inst['amount'] for inst in data.get('installments', []))
+        total_received = sum(coerce_amount(inst.get('amount')) for inst in data.get('installments', []))
         
         # Get Total Spent
         df_exp = pd.DataFrame(data.get('expenditure', []))
@@ -1031,13 +1567,14 @@ def main():
         with col_table:
             st.subheader("Head-wise Details")
             # Display clean table with numbers
-            st.dataframe(df_heads.style.format("{:,.0f}"), use_container_width=True, height=350)
+            st.dataframe(df_heads.style.format("{:,.0f}"), width="stretch", height=350)
 
         # --- 5. MONTHLY BURN RATE (TREND) ---
         st.divider()
         st.subheader("📈 Monthly Expenditure Trend")
         if not df_exp.empty:
-            df_exp['date'] = pd.to_datetime(df_exp['date'])
+            df_exp['date'] = pd.to_datetime(df_exp['date'], errors="coerce")
+            df_exp = df_exp.dropna(subset=['date'])
             # Extract Year-Month for grouping (e.g., "2025-04")
             df_exp['Month'] = df_exp['date'].dt.to_period('M').astype(str)
             monthly_trend = df_exp.groupby('Month')['amount'].sum().reset_index()
@@ -1146,17 +1683,24 @@ def main():
                             assigned_type = "Initial Allocation"
                             dict_key = "allocation"
                             
-                        # Save the PDF locally for later download
-                        pdf_path = f"documents/{selected_fy}_{dict_key}.pdf"
-                        with open(pdf_path, "wb") as f:
-                            f.write(budget_file.getvalue())
+                        # Save the PDF locally and to GitHub for later download
+                        pdf_path = save_uploaded_document(budget_file, f"{selected_fy}_{dict_key}.pdf")
                             
                         st.info(f"📅 **Document Date:** {doc_date} | 🔄 **Detected Type:** {assigned_type}")
                         
                         data['latest_quarter'] = assigned_type
                         data['latest_date'] = doc_date
                         
-                        save_data(data, selected_fy)
+                        save_data(
+                            data,
+                            selected_fy,
+                            audit_action="budget_upload",
+                            audit_details={
+                                "document_type": assigned_type,
+                                "document_date": doc_date,
+                                "file": os.path.basename(pdf_path),
+                            },
+                        )
                         st.toast("Budget Data Saved to GitHub & PDF saved locally!")
 
         # --- BUDGET VISUALIZATION & EDITING ---
@@ -1181,7 +1725,7 @@ def main():
             df = pd.DataFrame(df_data)
             
             # Display interactive Data Editor
-            edited_df = st.data_editor(df, use_container_width=True, hide_index=True, key=f"editor_{dict_key}")
+            edited_df = st.data_editor(df, width="stretch", hide_index=True, key=f"editor_{dict_key}")
             
             # Read-only totals for display below the editor
             tot_icar = edited_df["ICAR Share (₹)"].astype(float).sum()
@@ -1220,19 +1764,26 @@ def main():
                     else:
                         data['quarterly_allocations'][dict_key] = new_dict
                         
-                    save_data(data, selected_fy)
+                    save_data(
+                        data,
+                        selected_fy,
+                        audit_action="budget_edit",
+                        audit_details={"document_type": doc_type_name, "key": dict_key},
+                    )
                     st.success("Changes Saved & Recalculated!")
                     st.rerun()
 
             with col2:
-                pdf_path = f"documents/{selected_fy}_{dict_key}.pdf"
-                if os.path.exists(pdf_path):
-                    with open(pdf_path, "rb") as pdf_file:
-                        st.download_button(label=f"📥 Download Uploaded PDF", 
-                                           data=pdf_file, 
-                                           file_name=f"{doc_type_name}_{selected_fy}.pdf", 
-                                           mime="application/pdf",
-                                           key=f"dl_{dict_key}")
+                pdf_path = safe_documents_path(f"{selected_fy}_{dict_key}.pdf")
+                pdf_bytes = load_document_bytes(pdf_path)
+                if pdf_bytes:
+                    st.download_button(
+                        label=f"📥 Download Uploaded PDF",
+                        data=pdf_bytes,
+                        file_name=f"{doc_type_name}_{selected_fy}.pdf",
+                        mime="application/pdf",
+                        key=f"dl_{dict_key}",
+                    )
 
         col_a, col_b = st.columns(2)
         with col_a:
@@ -1285,7 +1836,7 @@ def main():
             if mismatch_data:
                 df_mismatch = pd.DataFrame.from_dict(mismatch_data, orient='index')
                 df_mismatch.loc['TOTAL'] = df_mismatch.sum(numeric_only=True)
-                st.dataframe(df_mismatch, use_container_width=True)
+                st.dataframe(df_mismatch, width="stretch")
             else:
                 st.info("No allocated budget values to show yet.")
         else:
@@ -1306,8 +1857,8 @@ def main():
             with st.spinner("Analyzing Email and PFMS documents..."):
                 
                 # Package BOTH PDFs as native files for Gemini
-                pdf_data_email = {"mime_type": "application/pdf", "data": email_file.getvalue()}
-                pdf_data_pfms = {"mime_type": "application/pdf", "data": pfms_file.getvalue()}
+                pdf_data_email = types.Part.from_bytes(data=email_file.getvalue(), mime_type="application/pdf")
+                pdf_data_pfms = types.Part.from_bytes(data=pfms_file.getvalue(), mime_type="application/pdf")
                 
                 full_prompt = f"""
                 Analyze the provided Email and PFMS documents and extract the installment information.
@@ -1326,24 +1877,20 @@ def main():
                 IMPORTANT: Return ONLY valid JSON.
                 """
                 
-                try:
-                    # Pass the prompt and BOTH files directly to the model
-                    response = model_pro.generate_content([full_prompt, pdf_data_email, pdf_data_pfms])
-                    json_str = response.text.replace('```json', '').replace('```', '').strip()
-                    extracted_inst = json.loads(json_str)
+                extracted_inst = extract_structured_with_ai(
+                    [pdf_data_email, pdf_data_pfms],
+                    full_prompt,
+                    InstallmentExtraction,
+                )
+                if extracted_inst:
                     st.session_state['pending_installment'] = extracted_inst
                     st.success("Documents analyzed successfully!")
-                except Exception as e:
-                    st.error(f"Error processing documents with AI: {e}")
 
         # If we have a pending installment in session state, show the editor
         if 'pending_installment' in st.session_state:
             extracted = st.session_state['pending_installment']
             
-            try:
-                dt_obj = datetime.strptime(extracted.get('date', str(date.today())), "%Y-%m-%d")
-            except:
-                dt_obj = date.today()
+            dt_obj = parse_date(extracted.get('date')) or datetime.combine(date.today(), datetime.min.time())
                 
             st.write("✏️ **Step 1: Edit Installment Details (Fix any AI extraction errors here):**")
             mc1, mc2, mc3, mc4 = st.columns(4)
@@ -1378,7 +1925,7 @@ def main():
             df = pd.DataFrame(df_data)
             
             st.write("✏️ **Step 2: Review and Edit Installment Amounts:**")
-            edited_df = st.data_editor(df, use_container_width=True, hide_index=True, key="inst_editor")
+            edited_df = st.data_editor(df, width="stretch", hide_index=True, key="inst_editor")
             
             total_amt = edited_df["Amount (₹)"].astype(float).sum()
             st.markdown(f"**Total Installment Amount:** ₹{total_amt:,.2f}")
@@ -1400,15 +1947,21 @@ def main():
                         "available": False
                     }
                     
-                    if not any(inst.get('pfms_id') == new_inst['pfms_id'] for inst in data['installments']):
+                    safe_pfms_id = sanitize_filename(new_inst['pfms_id'], "UNKNOWN_PFMS")
+                    if not new_inst['pfms_id'].strip():
+                        st.warning("Please enter a PFMS ID before saving.")
+                    elif not any(inst.get('pfms_id') == new_inst['pfms_id'] for inst in data['installments']):
                         data['installments'].append(new_inst)
-                        save_data(data, selected_fy)
+                        save_data(
+                            data,
+                            selected_fy,
+                            audit_action="installment_add",
+                            audit_details={"pfms_id": new_inst['pfms_id'], "amount": total_amt},
+                        )
                         
                         # Save PDFs locally
-                        email_path = f"documents/{selected_fy}_Inst_{new_inst['pfms_id']}_Email.pdf"
-                        pfms_path = f"documents/{selected_fy}_Inst_{new_inst['pfms_id']}_PFMS.pdf"
-                        with open(email_path, "wb") as f: f.write(email_file.getvalue())
-                        with open(pfms_path, "wb") as f: f.write(pfms_file.getvalue())
+                        save_uploaded_document(email_file, f"{selected_fy}_Inst_{safe_pfms_id}_Email.pdf")
+                        save_uploaded_document(pfms_file, f"{selected_fy}_Inst_{safe_pfms_id}_PFMS.pdf")
                         
                         st.toast("Installment Saved and Backed up!")
                         del st.session_state['pending_installment']
@@ -1446,7 +1999,7 @@ def main():
                                 df_data = [{"Budget Head": k, "Amount (₹)": v} for k, v in inst_heads.items()]
                                 df_saved = pd.DataFrame(df_data)
                                 
-                                edited_saved_df = st.data_editor(df_saved, use_container_width=True, hide_index=True, key=f"edit_saved_{inst['pfms_id']}")
+                                edited_saved_df = st.data_editor(df_saved, width="stretch", hide_index=True, key=f"edit_saved_{inst['pfms_id']}")
                                 tot_amt_saved = edited_saved_df["Amount (₹)"].astype(float).sum()
                                 st.markdown(f"**Total Amount:** ₹{tot_amt_saved:,.2f}")
                                 
@@ -1462,25 +2015,36 @@ def main():
                                                 main_inst['purpose'] = new_purpose
                                                 main_inst['type'] = new_inst_num if "State Share" not in inst.get('type','') else new_inst_num + " (State Share)"
                                                 break
-                                        save_data(data, selected_fy)
+                                        save_data(
+                                            data,
+                                            selected_fy,
+                                            audit_action="installment_edit",
+                                            audit_details={"pfms_id": inst['pfms_id'], "amount": tot_amt_saved},
+                                        )
                                         st.toast("Installment Updated!")
                                         st.rerun()
                                 with c_del:
                                     if st.button("🗑️ Delete Installment", key=f"del_btn_{inst['pfms_id']}"):
                                         data['installments'] = [i for i in data['installments'] if i['pfms_id'] != inst['pfms_id']]
-                                        save_data(data, selected_fy)
+                                        save_data(
+                                            data,
+                                            selected_fy,
+                                            audit_action="installment_delete",
+                                            audit_details={"pfms_id": inst['pfms_id']},
+                                        )
                                         st.toast("Installment Deleted!")
                                         st.rerun()
                                         
                             with col_b:
-                                email_path = f"documents/{selected_fy}_Inst_{inst['pfms_id']}_Email.pdf"
-                                pfms_path = f"documents/{selected_fy}_Inst_{inst['pfms_id']}_PFMS.pdf"
-                                if os.path.exists(email_path):
-                                    with open(email_path, "rb") as f:
-                                        st.download_button("📥 Download Email", f, file_name=f"{inst['pfms_id']}_Email.pdf", key=f"dl_e_{inst['pfms_id']}")
-                                if os.path.exists(pfms_path):
-                                    with open(pfms_path, "rb") as f:
-                                        st.download_button("📥 Download PFMS", f, file_name=f"{inst['pfms_id']}_PFMS.pdf", key=f"dl_p_{inst['pfms_id']}")
+                                safe_pfms_id = sanitize_filename(inst['pfms_id'], "UNKNOWN_PFMS")
+                                email_path = safe_documents_path(f"{selected_fy}_Inst_{safe_pfms_id}_Email.pdf")
+                                pfms_path = safe_documents_path(f"{selected_fy}_Inst_{safe_pfms_id}_PFMS.pdf")
+                                email_bytes = load_document_bytes(email_path)
+                                pfms_bytes = load_document_bytes(pfms_path)
+                                if email_bytes:
+                                    st.download_button("📥 Download Email", email_bytes, file_name=f"{safe_pfms_id}_Email.pdf", key=f"dl_e_{inst['pfms_id']}")
+                                if pfms_bytes:
+                                    st.download_button("📥 Download PFMS", pfms_bytes, file_name=f"{safe_pfms_id}_PFMS.pdf", key=f"dl_p_{inst['pfms_id']}")
                             st.divider()
                                
             
@@ -1501,7 +2065,7 @@ def main():
                             
             df_summary = pd.DataFrame.from_dict(summary_data, orient='index')
             df_summary.loc['GRAND TOTAL'] = df_summary.sum(numeric_only=True)
-            st.dataframe(df_summary, use_container_width=True)
+            st.dataframe(df_summary, width="stretch")
 
         else:
             st.info("No installments recorded yet.")
@@ -1514,7 +2078,11 @@ def main():
         pending_utilization = [inst for inst in data['installments'] if not inst.get('utilization_letter_generated')]
         
         if pending_utilization:
-            options = {f"{inst['type']} (₹{inst['amount']:,} - {inst['pfms_id']})": inst for inst in pending_utilization}
+            options = {}
+            for inst in pending_utilization:
+                pfms_id = inst.get('pfms_id') or "UNKNOWN_PFMS"
+                label = f"{inst.get('type', 'Installment')} (₹{coerce_amount(inst.get('amount')):,.2f} - {pfms_id})"
+                options[label] = inst
             selected_inst_str = st.selectbox("Select PFMS Receipt to draft letter for:", list(options.keys()))
             selected_inst_data = options[selected_inst_str]
 
@@ -1559,7 +2127,7 @@ def main():
             col1, col2, col3 = st.columns([1.2, 3, 1.2])
             with col1:
                 if NAU_LOGO and os.path.exists(NAU_LOGO):
-                    st.image(NAU_LOGO, use_container_width=True)
+                    st.image(NAU_LOGO, width="stretch")
             with col2:
                 st.markdown("""
                 <div class="letter-body center">
@@ -1571,7 +2139,7 @@ def main():
                 """, unsafe_allow_html=True)
             with col3:
                 if ICAR_LOGO and os.path.exists(ICAR_LOGO):
-                    st.image(ICAR_LOGO, use_container_width=True)
+                    st.image(ICAR_LOGO, width="stretch")
 
             st.markdown("<hr style='border: 1px solid black; margin-top: 10px; margin-bottom: 15px;' />", unsafe_allow_html=True)
             
@@ -1634,10 +2202,13 @@ def main():
                 # Generate native DOCX Word file based on live edits
                 doc_io = generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt, total_rec, non_rec_amt, total_amt)
                 
+                letter_filename = sanitize_filename(
+                    f"Letter_to_Comptroller_{selected_inst_data.get('type', 'Installment')}_{selected_inst_data.get('pfms_id', 'UNKNOWN_PFMS')}.docx"
+                )
                 st.download_button(
                     label="📥 Download Approved Letter (.docx)",
                     data=doc_io,
-                    file_name=f"Letter_to_Comptroller_{selected_inst_data['type']}_{selected_inst_data['pfms_id']}.docx",
+                    file_name=letter_filename,
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
         else:
@@ -1649,9 +2220,16 @@ def main():
         
         comp_file = st.file_uploader("Upload Comptroller Office Order PDF", type=['pdf'], key="comp_up")
         
-        # 1. Multi-select allows activating multiple installments at once
-        available_insts = [inst['type'] for inst in data.get('installments', []) if "State Share" not in inst.get('type', '')]
-        insts_to_activate = st.multiselect("This order relates to installment(s):", available_insts, key="act_type_multi")
+        # 1. Multi-select allows activating multiple installments at once, keyed by unique PFMS ID.
+        activation_options = {}
+        for inst in data.get('installments', []):
+            if "State Share" in inst.get('type', ''):
+                continue
+            pfms_id = inst.get('pfms_id', '')
+            label = f"{inst.get('type', '')} | {pfms_id} | ₹{coerce_amount(inst.get('amount')):,.2f}"
+            activation_options[label] = pfms_id
+        insts_to_activate = st.multiselect("This order relates to installment(s):", list(activation_options.keys()), key="act_type_multi")
+        selected_pfms_ids = {activation_options[label] for label in insts_to_activate}
 
         # 2. Toggle to automatically calculate and inject the 25% State Share
         add_state_share = st.checkbox("Automatically generate and add the matching 25% State Share", value=True, help="Calculates 25% matching funds for non-TSP heads based on the 75% ICAR PFMS receipt.")
@@ -1662,12 +2240,18 @@ def main():
             else:
                 with st.spinner("Activating Funds and Calculating State Share..."):
                     new_state_shares = []
+                    activated_pfms_ids = []
+                    safe_order_name = f"{selected_fy}_Comptroller_Order_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+                    save_uploaded_document(comp_file, safe_order_name)
+                    existing_pfms_ids = {inst.get('pfms_id') for inst in data.get('installments', [])}
                     
                     for inst in data['installments']:
                         # Check if selected and not already activated to prevent duplication
-                        if inst['type'] in insts_to_activate and not inst.get('comptroller_order_uploaded'):
+                        if inst.get('pfms_id') in selected_pfms_ids and not inst.get('comptroller_order_uploaded'):
                             inst['available'] = True
                             inst['comptroller_order_uploaded'] = True
+                            inst['comptroller_order_file'] = safe_order_name
+                            activated_pfms_ids.append(inst.get('pfms_id'))
                             
                             # Calculate the 25% State Share mathematically
                             if add_state_share:
@@ -1683,27 +2267,40 @@ def main():
                                         state_total += state_amt
                                 
                                 # Create a separate ledger entry for the State Share
-                                if state_total > 0:
+                                state_pfms_id = "STATE_MATCH_" + inst.get('pfms_id', '')
+                                if state_total > 0 and state_pfms_id not in existing_pfms_ids:
                                     state_inst = {
                                         "date": datetime.now().strftime("%Y-%m-%d"),
                                         "quarter": inst.get('quarter', 'Q1'),
                                         "installment_num": inst.get('installment_num', '') + " (State Share)",
                                         "purpose": "State Share 25%",
-                                        "pfms_id": "STATE_MATCH_" + inst.get('pfms_id', ''),
+                                        "pfms_id": state_pfms_id,
                                         "amount": state_total,
                                         "heads": state_heads,
-                                        "type": inst['type'] + " (State Share)",
+                                        "type": inst.get('type', 'Installment') + " (State Share)",
                                         "available": True,
-                                        "comptroller_order_uploaded": True
+                                        "comptroller_order_uploaded": True,
+                                        "source_pfms_id": inst.get('pfms_id'),
+                                        "comptroller_order_file": safe_order_name
                                     }
                                     new_state_shares.append(state_inst)
+                                    existing_pfms_ids.add(state_pfms_id)
 
                     # Append the newly created State Share records safely
                     if new_state_shares:
                         data['installments'].extend(new_state_shares)
                         
-                    save_data(data, selected_fy)
-                    st.success(f"Funds for {', '.join(insts_to_activate)} are now READY! Matching State Share generated.")
+                    save_data(
+                        data,
+                        selected_fy,
+                        audit_action="fund_activation",
+                        audit_details={
+                            "activated_pfms_ids": activated_pfms_ids,
+                            "state_share_records": [inst.get('pfms_id') for inst in new_state_shares],
+                            "order_file": safe_order_name,
+                        },
+                    )
+                    st.success(f"Funds for {', '.join(activated_pfms_ids)} are now READY! Matching State Share generated.")
                     st.rerun()
 
 
@@ -1731,7 +2328,12 @@ def main():
                         "amount": exp_amt
                     }
                     data['expenditure'].append(new_exp)
-                    save_data(data, selected_fy)
+                    save_data(
+                        data,
+                        selected_fy,
+                        audit_action="expenditure_add",
+                        audit_details={"date": new_exp["date"], "head": exp_head, "amount": exp_amt},
+                    )
                     st.toast("Expenditure Added and Backed up.")
 
 # Re-initialize df_exp here so both this tab and the chatbot can see it
@@ -1746,7 +2348,8 @@ def main():
         st.subheader(f"Spend list for {month_to_process} {year_to_process}")
         
         if not df_exp.empty:
-            df_exp['date_obj'] = pd.to_datetime(df_exp['date'])
+            df_exp['date_obj'] = pd.to_datetime(df_exp['date'], errors="coerce")
+            df_exp = df_exp.dropna(subset=['date_obj'])
             current_month_exp = df_exp[
                 (df_exp['date_obj'].dt.strftime('%B') == month_to_process) & 
                 (df_exp['date_obj'].dt.year == year_to_process)
@@ -1777,7 +2380,12 @@ def main():
                         for e in data['expenditure']: 
                             e.pop('_orig_idx', None) 
                             
-                        save_data(data, selected_fy)
+                        save_data(
+                            data,
+                            selected_fy,
+                            audit_action="expenditure_delete",
+                            audit_details={"date": row['date'], "head": row['head'], "amount": float(row['amount'])},
+                        )
                         st.toast("Entry deleted successfully!")
                         st.rerun()
             else:
@@ -1811,7 +2419,7 @@ def main():
                 total_month_amount = df_month_sum['Amount (₹)'].sum()
                 df_month_sum.loc[len(df_month_sum)] = ['**GRAND TOTAL**', total_month_amount]
                 
-                st.dataframe(df_month_sum, use_container_width=True, hide_index=True)
+                st.dataframe(df_month_sum, width="stretch", hide_index=True)
 
             # 2. Yearly (FY) Summary Table with Grand Total
             with col_sum2:
@@ -1830,7 +2438,7 @@ def main():
                 total_amount = df_year_sum['Amount (₹)'].sum()
                 df_year_sum.loc[len(df_year_sum)] = ['**GRAND TOTAL**', total_amount]
                 
-                st.dataframe(df_year_sum, use_container_width=True, hide_index=True)
+                st.dataframe(df_year_sum, width="stretch", hide_index=True)
             # =====================================================================
             # 👇 PASTE THIS NEW SECTION RIGHT BELOW THE SUMMARY TABLES 👇
             # =====================================================================
@@ -1849,7 +2457,8 @@ def main():
             df_yearly_log = pd.DataFrame(exp_list_yearly)
             
             if not df_yearly_log.empty:
-                df_yearly_log['date_obj'] = pd.to_datetime(df_yearly_log['date'])
+                df_yearly_log['date_obj'] = pd.to_datetime(df_yearly_log['date'], errors="coerce")
+                df_yearly_log = df_yearly_log.dropna(subset=['date_obj'])
                 
                 # Step 1: Filter by selected head
                 if selected_log_head != "All Heads":
@@ -1874,40 +2483,43 @@ def main():
                         # Auto-generate PDF in the background
                         pdf = FPDF(orientation='L')
                         pdf.add_page()
-                        pdf.set_font("Arial", 'B', 14)
-                        pdf.cell(0, 10, f"Expenditure Log - {selected_log_head} (FY {selected_fy})", ln=True, align='C')
+                        pdf.set_font("Helvetica", 'B', 14)
+                        pdf.cell(
+                            0,
+                            10,
+                            f"Expenditure Log - {selected_log_head} (FY {selected_fy})",
+                            new_x=XPos.LMARGIN,
+                            new_y=YPos.NEXT,
+                            align='C',
+                        )
                         pdf.ln(5)
                         
-                        pdf.set_font("Arial", 'B', 10)
+                        pdf.set_font("Helvetica", 'B', 10)
                         cols = [25, 60, 30, 35, 125]
                         headers = ["Date", "Budget Head", "Amount", "Prog. Total", "Details"]
                         for i, h in enumerate(headers):
-                            pdf.cell(cols[i], 10, h, 1, 0, 'C')
+                            pdf.cell(cols[i], 10, h, border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C')
                         pdf.ln()
                         
-                        pdf.set_font("Arial", '', 10)
+                        pdf.set_font("Helvetica", '', 10)
                         for _, r in df_yearly_log.iterrows():
-                            pdf.cell(cols[0], 10, str(r['date']), 1, 0, 'C')
-                            pdf.cell(cols[1], 10, str(r['head'])[:30], 1, 0, 'L')
-                            pdf.cell(cols[2], 10, f"{float(r['amount']):,.2f}", 1, 0, 'R')
-                            pdf.cell(cols[3], 10, f"{float(r['progressive_total']):,.2f}", 1, 0, 'R')
+                            pdf.cell(cols[0], 10, str(r['date']), border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C')
+                            pdf.cell(cols[1], 10, str(r['head'])[:30], border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='L')
+                            pdf.cell(cols[2], 10, f"{float(r['amount']):,.2f}", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='R')
+                            pdf.cell(cols[3], 10, f"{float(r['progressive_total']):,.2f}", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='R')
                             
                             # Clean details to avoid PDF encoding errors (removes emojis/unsupported chars)
                             detail_txt = str(r['detail']).replace('\n', ' ').encode('latin-1', 'ignore').decode('latin-1')[:75]
-                            pdf.cell(cols[4], 10, detail_txt, 1, 0, 'L')
+                            pdf.cell(cols[4], 10, detail_txt, border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='L')
                             pdf.ln()
                             
-                        pdf_path = f"documents/Expenditure_Log_{selected_fy}.pdf"
-                        pdf.output(pdf_path)
-                        
-                        with open(pdf_path, "rb") as f:
-                            st.download_button(
-                                label="📥 Download Log (PDF)",
-                                data=f,
-                                file_name=f"Expenditure_Log_{selected_log_head}_{selected_fy}.pdf".replace(" ", "_"),
-                                mime="application/pdf",
-                                key="dl_log_pdf"
-                            )
+                        st.download_button(
+                            label="📥 Download Log (PDF)",
+                            data=pdf_to_bytes(pdf),
+                            file_name=sanitize_filename(f"Expenditure_Log_{selected_log_head}_{selected_fy}.pdf".replace(" ", "_")),
+                            mime="application/pdf",
+                            key="dl_log_pdf"
+                        )
                     
                     # Render Table Header (Now with 6 columns)
                     yc1, yc2, yc3, yc4, yc5, yc6 = st.columns([1.2, 2.2, 1.5, 1.5, 2.6, 1])
@@ -1935,7 +2547,12 @@ def main():
                             for e in data['expenditure']:
                                 e.pop('_orig_idx', None)
                                 
-                            save_data(data, selected_fy)
+                            save_data(
+                                data,
+                                selected_fy,
+                                audit_action="expenditure_delete",
+                                audit_details={"date": row['date'], "head": row['head'], "amount": float(row['amount'])},
+                            )
                             st.toast("Yearly log entry deleted successfully!")
                             st.rerun()
                 else:
@@ -2003,7 +2620,12 @@ def main():
                     )
                 if st.form_submit_button("💾 Save Opening Balances"):
                     data['opening_balances'] = new_obs
-                    save_data(data, selected_fy)
+                    save_data(
+                        data,
+                        selected_fy,
+                        audit_action="opening_balances_update",
+                        audit_details={"heads": list(new_obs.keys())},
+                    )
                     st.success(f"Opening Balances manually updated for {selected_fy}!")
                     st.rerun()
 
@@ -2030,7 +2652,9 @@ def main():
 
         # Cumulative Funds Received (From April 1 up to end of selected month)
         for inst in data.get('installments', []):
-            inst_date = datetime.strptime(inst['date'], "%Y-%m-%d")
+            inst_date = parse_date(inst.get('date'))
+            if not inst_date:
+                continue
             if fy_start_date <= inst_date <= end_date:
                 for h_name, amt in inst.get('heads', {}).items():
                     soe_head = get_smart_soe_head(h_name)
@@ -2039,7 +2663,9 @@ def main():
 
         # Cumulative Expenditure (From April 1 up to end of selected month)
         for e in data.get('expenditure', []):
-            e_date = datetime.strptime(e['date'], "%Y-%m-%d")
+            e_date = parse_date(e.get('date'))
+            if not e_date:
+                continue
             if fy_start_date <= e_date <= end_date:
                 # Combine head and sub_head just in case, ensuring we catch the keyword
                 combined_head = f"{e.get('head', '')} {e.get('sub_head', '')}"
@@ -2090,7 +2716,7 @@ def main():
         df_soe = pd.DataFrame(data_table, columns=columns)
 
         st.markdown("💡 **Tip: Your SOE is now calculated automatically. You can still click to edit values if needed before downloading.**")
-        edited_df = st.data_editor(df_soe, use_container_width=True, hide_index=True)
+        edited_df = st.data_editor(df_soe, width="stretch", hide_index=True)
         st.markdown("<ul><li>In 2025-26 State share released only in Pay and allowances</li></ul>", unsafe_allow_html=True)
 
         st.divider()
@@ -2129,7 +2755,9 @@ def main():
 
         # Distribute all expenditures from the FY into their exact month buckets
         for e in data.get('expenditure', []):
-            e_date = datetime.strptime(e['date'], "%Y-%m-%d")
+            e_date = parse_date(e.get('date'))
+            if not e_date:
+                continue
             if fy_start_date <= e_date <= fy_end_date:
                 m_name = calendar.month_name[e_date.month]
                 combined_head = f"{e.get('head', '')} {e.get('sub_head', '')}"
@@ -2185,7 +2813,7 @@ def main():
         df_yearly = pd.DataFrame(y_table, columns=y_cols)
         
         st.markdown("💡 **Tip: Click to edit values before downloading your 12-Month Summary.**")
-        edited_yearly_df = st.data_editor(df_yearly, use_container_width=True, hide_index=True, key="yearly_summary_editor")
+        edited_yearly_df = st.data_editor(df_yearly, width="stretch", hide_index=True, key="yearly_summary_editor")
 
         # Separate Download Button for 12-Month Summary
         if st.button("Generate 12-Month Summary Word Doc", key="yearly_btn_new"):
@@ -2211,7 +2839,9 @@ def main():
 
         # Annual Cumulative Funds
         for inst in data.get('installments', []):
-            inst_date = datetime.strptime(inst['date'], "%Y-%m-%d")
+            inst_date = parse_date(inst.get('date'))
+            if not inst_date:
+                continue
             if fy_start_date <= inst_date <= fy_end_date:
                 for h_name, amt in inst.get('heads', {}).items():
                     soe_head = get_smart_soe_head(h_name)
@@ -2219,7 +2849,9 @@ def main():
 
         # Annual Cumulative Exp
         for e in data.get('expenditure', []):
-            e_date = datetime.strptime(e['date'], "%Y-%m-%d")
+            e_date = parse_date(e.get('date'))
+            if not e_date:
+                continue
             if fy_start_date <= e_date <= fy_end_date:
                 combined_head = f"{e.get('head', '')} {e.get('sub_head', '')}"
                 soe_head = get_smart_soe_head(combined_head)
@@ -2254,7 +2886,7 @@ def main():
         ]
         
         df_soe_y = pd.DataFrame(data_table_y, columns=columns_y)
-        edited_df_y = st.data_editor(df_soe_y, use_container_width=True, hide_index=True, key="annual_edit")
+        edited_df_y = st.data_editor(df_soe_y, width="stretch", hide_index=True, key="annual_edit")
 
         if st.button("Generate Annual SOE Word Document", key="soe_btn_y"):
             with st.spinner("Creating Annual Word file..."):
@@ -2294,7 +2926,7 @@ def main():
                 index=dynamic_years.index(prev_fy_string) if prev_fy_string in dynamic_years else 0
             )
             
-            pdf_path = f"documents/AUC_Archive_{selected_archive_year}.pdf"
+            pdf_path = safe_documents_path(f"AUC_Archive_{selected_archive_year}.pdf")
             
             col_up, col_dl = st.columns(2)
             
@@ -2302,8 +2934,7 @@ def main():
                 up_file = st.file_uploader(f"Upload AUC for {selected_archive_year}", type=['pdf'], key="up_arc_dyn")
                 if up_file and st.button(f"Save & Process {selected_archive_year}", key="btn_ext_dyn"):
                     # 1. Save the file permanently
-                    with open(pdf_path, "wb") as f:
-                        f.write(up_file.getvalue())
+                    save_uploaded_document(up_file, f"AUC_Archive_{selected_archive_year}.pdf")
                     
                     # 2. If it is the strictly previous year, trigger the AI Extraction!
                     if selected_archive_year == prev_fy_string:
@@ -2323,24 +2954,30 @@ def main():
                                     ext_val = float(extracted_bals.get(k) or 0.0)
                                     data['opening_balances'][k] = ext_val
                                      
-                                save_data(data, selected_fy)
+                                save_data(
+                                    data,
+                                    selected_fy,
+                                    audit_action="auc_balance_extract",
+                                    audit_details={"archive_year": selected_archive_year},
+                                )
                                 st.success("Balances extracted and sent to Tab 5 SOE!")
                     else:
+                        append_audit_log(selected_fy, "auc_archive_upload", {"archive_year": selected_archive_year})
                         st.success(f"Archive saved for {selected_archive_year}!")
                     st.rerun()
                     
             with col_dl:
                 st.write("###") # Spacing to align with uploader
-                if os.path.exists(pdf_path):
+                auc_bytes = load_document_bytes(pdf_path)
+                if auc_bytes:
                     st.success(f"✅ AUC for {selected_archive_year} is on file.")
-                    with open(pdf_path, "rb") as f:
-                        st.download_button(
-                            label=f"📥 Download {selected_archive_year} AUC", 
-                            data=f, 
-                            file_name=f"AUC_Signed_{selected_archive_year}.pdf", 
-                            mime="application/pdf", 
-                            key="dl_arc_dyn"
-                        )
+                    st.download_button(
+                        label=f"📥 Download {selected_archive_year} AUC",
+                        data=auc_bytes,
+                        file_name=f"AUC_Signed_{selected_archive_year}.pdf",
+                        mime="application/pdf",
+                        key="dl_arc_dyn",
+                    )
                 else:
                     st.info("❌ No file uploaded for this year yet.")
         
@@ -2356,7 +2993,9 @@ def main():
         inst_data = []
         tot_remittance = 0.0
         for idx, inst in enumerate(data.get('installments', [])):
-            inst_date = datetime.strptime(inst['date'], "%Y-%m-%d")
+            inst_date = parse_date(inst.get('date'))
+            if not inst_date:
+                continue
             if fy_start_date <= inst_date <= fy_end_date:
                 amt = float(inst.get('amount', 0.0))
                 inst_data.append([idx+1, f"DSC Transaction payment advice report Dated: {inst.get('date')}", f"{amt:,.2f}"])
@@ -2388,7 +3027,9 @@ def main():
             return None
             
         for e in data.get('expenditure', []):
-            e_date = datetime.strptime(e['date'], "%Y-%m-%d")
+            e_date = parse_date(e.get('date'))
+            if not e_date:
+                continue
             if fy_start_date <= e_date <= fy_end_date:
                 combined_head = f"{e.get('head', '')} {e.get('sub_head', '')}"
                 soe_head = get_smart_soe_head(combined_head)
@@ -2442,7 +3083,7 @@ def main():
         # 1. Editable Installment Table
         st.markdown("**Received Installments:**")
         df_inst = pd.DataFrame(inst_data, columns=["Sr.No", "Letter No and Date", "Amount"])
-        edited_df_inst = st.data_editor(df_inst, use_container_width=True, hide_index=True, key="auc_edit_inst")
+        edited_df_inst = st.data_editor(df_inst, width="stretch", hide_index=True, key="auc_edit_inst")
         final_inst_data = edited_df_inst.values.tolist()
         
         # 2. Editable Main Paragraph
@@ -2456,14 +3097,14 @@ def main():
         st.markdown("**Table 1: Showing the details of receipt and expenditure figure (in Rupees)**")
         t1_columns = [f"Opening balance as on 1st April {fy_start_year}", f"Remittance Received {selected_fy}", "Receipt", f"ICAR share of Exp during {selected_fy}", f"Closing balance as on 31st March {fy_end_year}"]
         df_t1 = pd.DataFrame([t1_data], columns=t1_columns)
-        edited_df_t1 = st.data_editor(df_t1, use_container_width=True, hide_index=True, key="auc_edit_t1")
+        edited_df_t1 = st.data_editor(df_t1, width="stretch", hide_index=True, key="auc_edit_t1")
         final_t1_data = edited_df_t1.values.tolist()[0]
         
         # 4. Editable Table 2
         st.markdown("**Table 2: Showing the head wise details of expenditure figure (in Rupees)**")
         t2_columns = ["Head", f"Allocation for the Year {selected_fy} (100%)", "ICAR share of Expenditure (75%)", "State Share (25%)", "Total Expenditure"]
         df_t2 = pd.DataFrame(t2_data, columns=t2_columns)
-        edited_df_t2 = st.data_editor(df_t2, use_container_width=True, hide_index=True, key="auc_edit_t2")
+        edited_df_t2 = st.data_editor(df_t2, width="stretch", hide_index=True, key="auc_edit_t2")
         final_t2_data = edited_df_t2.values.tolist()
         
         st.divider()
@@ -2501,14 +3142,90 @@ def main():
         st.header("🧠 Advanced Grant Assistant & Report Generator")
         st.write("Ask questions about your grant, or **upload University guidelines, Excel data, or PDFs** to extract information and automatically generate reports.")
 
-        # 1. Knowledge Base Uploader
+        # 1. Temporary Context Uploader
         with st.expander("📂 Upload Documents for Context (PDF, Excel, CSV, Word)", expanded=False):
             st.info("Upload files here, then ask the chatbot to analyze them, summarize rules, or generate a specific report based on their contents.")
             chat_files = st.file_uploader("Upload reference files", type=['pdf', 'xlsx', 'csv', 'docx'], accept_multiple_files=True, key="chat_uploader")
 
-        # 2. Financial Context Setup
+        # 2. Persistent Knowledge Store
+        knowledge_metadata = load_ai_knowledge()
+        with st.expander("Grant Knowledge Store", expanded=False):
+            if genai_client is None:
+                st.info("Add GEMINI_API_KEY in Streamlit secrets to create or query the Google File Search knowledge store.")
+            else:
+                store_name = knowledge_metadata.get("store_name")
+                st.caption(f"Store: {store_name or 'Not created yet'}")
+                knowledge_files = st.file_uploader(
+                    "Index selected grant documents",
+                    type=['pdf', 'xlsx', 'csv', 'docx'],
+                    accept_multiple_files=True,
+                    key="knowledge_store_uploader",
+                )
+                if knowledge_files and st.button("Upload to Knowledge Store", key="upload_knowledge_store"):
+                    uploaded_names = []
+                    with st.spinner("Uploading and indexing selected files..."):
+                        for knowledge_file in knowledge_files:
+                            upload_file_to_knowledge_store(knowledge_file)
+                            uploaded_names.append(knowledge_file.name)
+                    append_audit_log(selected_fy, "ai_knowledge_upload", {"files": uploaded_names})
+                    st.success("Knowledge Store updated.")
+                    st.rerun()
+
+                documents = knowledge_metadata.get("documents", [])
+                if documents:
+                    st.dataframe(pd.DataFrame(documents)[["file_name", "mime_type", "uploaded_at"]], width="stretch", hide_index=True)
+                else:
+                    st.info("No documents indexed yet.")
+
+        # 3. Controlled Learning Memory
+        with st.expander("Controlled Learning Memory", expanded=False):
+            memories = load_learning_memories()
+            with st.form("add_learning_memory_form"):
+                mem_col1, mem_col2 = st.columns(2)
+                mem_title = mem_col1.text_input("Title")
+                mem_keywords = mem_col2.text_input("Keywords, comma separated")
+                mem_text = st.text_area("Memory text")
+                if st.form_submit_button("Save Learning Memory"):
+                    if not mem_title.strip() or not mem_text.strip():
+                        st.error("Please enter a title and memory text.")
+                    else:
+                        memories.append({
+                            "id": datetime.now().strftime("%Y%m%d%H%M%S%f"),
+                            "title": mem_title.strip(),
+                            "keywords": mem_keywords.strip(),
+                            "memory_text": mem_text.strip(),
+                            "enabled": True,
+                            "created_at": datetime.now().isoformat(timespec="seconds"),
+                        })
+                        save_learning_memories(memories)
+                        append_audit_log(selected_fy, "learning_memory_add", {"title": mem_title.strip()})
+                        st.success("Learning memory saved.")
+                        st.rerun()
+
+            if memories:
+                st.write("Saved memories")
+                for memory in memories:
+                    status = "Enabled" if memory.get("enabled", True) else "Disabled"
+                    with st.container(border=True):
+                        st.markdown(f"**{memory.get('title', '')}** ({status})")
+                        st.caption(memory.get("keywords", ""))
+                        st.write(memory.get("memory_text", ""))
+                        col_mem1, col_mem2 = st.columns(2)
+                        if col_mem1.button("Toggle Enabled", key=f"toggle_memory_{memory.get('id')}"):
+                            memory["enabled"] = not memory.get("enabled", True)
+                            save_learning_memories(memories)
+                            st.rerun()
+                        if col_mem2.button("Delete", key=f"delete_memory_{memory.get('id')}"):
+                            memories = [m for m in memories if m.get("id") != memory.get("id")]
+                            save_learning_memories(memories)
+                            append_audit_log(selected_fy, "learning_memory_delete", {"title": memory.get("title", "")})
+                            st.rerun()
+            else:
+                st.info("No controlled memories saved yet.")
+
+        # 4. Financial Context Setup
         budget_summary = data['revised_allocation'] if data['revised_allocation'] else data['allocation']
-        received_summary = sum(inst['amount'] for inst in data['installments'])
+        received_summary = sum(coerce_amount(inst.get('amount')) for inst in data['installments'])
         
         df_exp = pd.DataFrame(data.get('expenditure', []))
         spend_summary = {}
@@ -2526,9 +3243,11 @@ def main():
         1. Answer user questions robustly, calculating remaining balances where needed (Allocation - Spend).
         2. If the user asks to generate a report or summary, format it highly professionally using Markdown tables, bold headers, and bullet points.
         3. If the user has provided uploaded files, prioritize extracting the exact rules, guidelines, or data they request from those files.
+        4. If LEARNED MEMORY is provided, use it as explicit saved preference/correction.
+        5. If File Search sources are available, ground answers in those documents and mention when the answer is based on indexed knowledge.
         """
 
-        # 3. Initialize Chat History in Session State
+        # 5. Initialize Chat History in Session State
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
@@ -2537,7 +3256,13 @@ def main():
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        # 4. Handle User Prompt
+        use_file_search = bool(knowledge_metadata.get("store_name")) and st.checkbox(
+            "Use Grant Knowledge Store for answers",
+            value=bool(knowledge_metadata.get("store_name")),
+            key="use_file_search_for_chat",
+        )
+
+        # 6. Handle User Prompt
         if prompt := st.chat_input("Ask about grant status, or type 'Generate a report based on the uploaded file' ..."):
             
             # Display user message
@@ -2550,16 +3275,31 @@ def main():
                 
                 with st.spinner("Analyzing data and generating response..."):
                     try:
-                        # --- Give Gemini true conversational memory ---
-                        gemini_history = []
-                        for msg in st.session_state.messages[:-1]: # Exclude the current prompt
-                            role = "model" if msg["role"] == "assistant" else "user"
-                            gemini_history.append({"role": role, "parts": [msg["content"]]})
-                        
-                        chat = model_pro.start_chat(history=gemini_history)
-                        
+                        if genai_client is None:
+                            raise RuntimeError("Please add GEMINI_API_KEY in Streamlit secrets to use the AI assistant.")
+
+                        recent_history = "\n".join(
+                            f"{msg['role'].upper()}: {msg['content']}"
+                            for msg in st.session_state.messages[-10:-1]
+                        )
+                        learned = matching_learning_memories(prompt)
+                        learned_context = "\n".join(
+                            f"- {m.get('title')}: {m.get('memory_text')}"
+                            for m in learned
+                        )
+
                         # --- Prepare the current message payload ---
-                        message_parts = [f"SYSTEM CONTEXT:\n{system_context}\n\nUSER PROMPT:\n{prompt}"]
+                        user_payload = f"""
+                        RECENT CHAT HISTORY:
+                        {recent_history or 'No prior chat history.'}
+
+                        LEARNED MEMORY:
+                        {learned_context or 'No matching saved learning memory.'}
+
+                        USER PROMPT:
+                        {prompt}
+                        """
+                        message_parts = [types.Part.from_text(text=user_payload)]
                         
                         # --- SMART FILE PROCESSING ---
                         if chat_files:
@@ -2568,35 +3308,53 @@ def main():
                                 
                                 # Process PDFs natively through Gemini
                                 if ext == 'pdf':
-                                    message_parts.append({"mime_type": "application/pdf", "data": file.getvalue()})
+                                    message_parts.append(types.Part.from_bytes(data=file.getvalue(), mime_type="application/pdf"))
                                     
                                 # Extract text from Word Docs using python-docx
                                 elif ext == 'docx':
                                     try:
                                         doc = Document(io.BytesIO(file.getvalue()))
                                         doc_text = "\n".join([p.text for p in doc.paragraphs])
-                                        message_parts.append(f"\n--- Content of {file.name} ---\n{doc_text}\n---")
+                                        message_parts.append(types.Part.from_text(text=f"\n--- Content of {file.name} ---\n{doc_text}\n---"))
                                     except Exception:
-                                        message_parts.append(f"[Could not extract text from Word Doc: {file.name}]")
+                                        message_parts.append(types.Part.from_text(text=f"[Could not extract text from Word Doc: {file.name}]"))
                                         
                                 # Extract data from Excel/CSV using Pandas
                                 elif ext in ['xlsx', 'csv']:
                                     try:
                                         df = pd.read_csv(file) if ext == 'csv' else pd.read_excel(file)
                                         csv_string = df.to_csv(index=False)
-                                        message_parts.append(f"\n--- Tabular Data from {file.name} ---\n{csv_string}\n---")
+                                        message_parts.append(types.Part.from_text(text=f"\n--- Tabular Data from {file.name} ---\n{csv_string}\n---"))
                                     except Exception:
-                                        message_parts.append(f"[Could not extract table data from {file.name}]")
+                                        message_parts.append(types.Part.from_text(text=f"[Could not extract table data from {file.name}]"))
 
-                        # Send the massive combined payload to Gemini
-                        response = chat.send_message(message_parts)
+                        tools = []
+                        if use_file_search:
+                            tools.append(types.Tool(file_search=types.FileSearch(
+                                file_search_store_names=[knowledge_metadata["store_name"]],
+                                top_k=5,
+                            )))
+
+                        response = genai_client.models.generate_content(
+                            model=GEMINI_CHAT_MODEL,
+                            contents=message_parts,
+                            config=types.GenerateContentConfig(
+                                system_instruction=system_context,
+                                tools=tools or None,
+                            ),
+                        )
                         full_response = response.text
+                        citations = extract_file_search_citations(response) if use_file_search else []
                         
                     except Exception as e:
                         full_response = f"Sorry, the AI service encountered an error. Error details: {e}"
+                        citations = []
 
                 # Stream the response to the UI
                 message_placeholder.markdown(full_response)
+                if citations:
+                    with st.expander("File Search Sources", expanded=False):
+                        st.json(citations[:8])
             
             # Save assistant response to memory
             st.session_state.messages.append({"role": "assistant", "content": full_response})
