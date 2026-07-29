@@ -1,6 +1,32 @@
 {
     "financial_year": "2026-27",
-    "allocation": {},
+    "allocation": {
+        "Pay and Allowances": {
+            "icar": 1857000.0,
+            "state": 619000.0,
+            "total": 2476000.0
+        },
+        "Travelling Allowances (TA)": {
+            "icar": 20250.0,
+            "state": 6750.0,
+            "total": 27000.0
+        },
+        "Other Recurring Contingencies (ORC)": {
+            "icar": 401250.0,
+            "state": 133750.0,
+            "total": 535000.0
+        },
+        "Non-Recurring Contingencies (Equipments/Works)": {
+            "icar": 550500.0,
+            "state": 183500.0,
+            "total": 734000.0
+        },
+        "TSP": {
+            "icar": 0.0,
+            "state": 0.0,
+            "total": 0.0
+        }
+    },
     "revised_allocation": {},
     "quarterly_allocations": {
         "Q1": {},
@@ -35,7 +61,11 @@
             "pfms_id": "STATE_MATCH_IDIBR52026041601672704",
             "amount": 83333.33,
             "heads": {
-                "Pay and Allowances": 83333.33
+                "Pay and Allowances": 83333.33,
+                "Travelling Allowances (TA)": 0.0,
+                "Other Recurring Contingencies (ORC)": 0.0,
+                "Non-Recurring Contingencies (Equipments/Works)": 0.0,
+                "TSP": 0.0
             },
             "type": "I (State Share)",
             "available": true,
@@ -74,7 +104,8 @@
                 "TSP": 0.0
             },
             "type": "III",
-            "available": false
+            "available": false,
+            "comptroller_order_uploaded": false
         }
     ],
     "expenditure": [
@@ -187,8 +218,8 @@
             "amount": 135064.0
         }
     ],
-    "latest_quarter": "Full Year",
-    "latest_date": "N/A",
+    "latest_quarter": "Initial Allocation",
+    "latest_date": "2026-07-28",
     "opening_balances": {
         "Establishment Charges": -370662.1,
         "TA": 0.0,
