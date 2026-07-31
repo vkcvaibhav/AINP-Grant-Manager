@@ -222,6 +222,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Farm labour: 16/06/2026 to 30/06/2026",
             "amount": 4554.0
+        },
+        {
+            "date": "2026-07-15",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Electronic work and parts",
+            "amount": 4756.0
         }
     ],
     "latest_quarter": "Initial Allocation",
