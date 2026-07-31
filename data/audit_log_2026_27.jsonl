@@ -3,3 +3,4 @@
 {"timestamp": "2026-07-29T05:37:40", "financial_year": "2026-27", "action": "budget_edit", "details": {"document_type": "Initial_Allocation", "key": "allocation"}}
 {"timestamp": "2026-07-29T05:41:01", "financial_year": "2026-27", "action": "budget_edit", "details": {"document_type": "Initial_Allocation", "key": "allocation"}}
 {"timestamp": "2026-07-31T04:55:58", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-07-01", "head": "Other Recurring Contingencies (ORC)", "amount": 4554.0}}
+{"timestamp": "2026-07-31T04:57:46", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-07-15", "head": "Other Recurring Contingencies (ORC)", "amount": 4756.0}}
