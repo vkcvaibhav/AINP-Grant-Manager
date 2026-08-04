@@ -106,6 +106,24 @@
             "type": "III",
             "available": false,
             "comptroller_order_uploaded": false
+        },
+        {
+            "date": "2026-07-31",
+            "quarter": "Q2",
+            "installment_num": "IV, V",
+            "purpose": "GIA-Salary, GIA-General, GIA-Capital",
+            "pfms_id": "C072647563242, C072647575860, C072647709902",
+            "amount": 775000.0,
+            "heads": {
+                "Pay and Allowances": 400000.0,
+                "Travelling Allowances (TA)": 0.0,
+                "Other Recurring Contingencies (ORC)": 225000.0,
+                "Non-Recurring Contingencies (Equipments/Works)": 150000.0,
+                "TSP": 0.0
+            },
+            "type": "IV, V",
+            "available": false,
+            "comptroller_order_uploaded": false
         }
     ],
     "expenditure": [
