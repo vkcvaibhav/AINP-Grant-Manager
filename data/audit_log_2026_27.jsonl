@@ -9,3 +9,4 @@
 {"timestamp": "2026-07-31T05:02:28", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-07-20", "head": "Other Recurring Contingencies (ORC)", "amount": 4838.0}}
 {"timestamp": "2026-07-31T05:12:25", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-07-01", "head": "Pay and Allowances", "amount": 135064.0}}
 {"timestamp": "2026-07-31T10:49:27", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-07-01", "head": "Pay and Allowances", "amount": 70760.0}}
+{"timestamp": "2026-08-04T09:29:08", "financial_year": "2026-27", "action": "installment_add", "details": {"pfms_id": "C072647563242, C072647575860, C072647709902", "amount": 775000.0}}
