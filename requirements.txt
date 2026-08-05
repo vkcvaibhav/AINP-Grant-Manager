@@ -1,4 +1,11 @@
 streamlit
+# starlette 1.4.0 made `thread_minimum_size` a required keyword-only arg on
+# GZipResponder, which breaks streamlit's _MediaAwareGZipResponder subclass
+# (streamlit/web/server/starlette/starlette_gzip_middleware.py) up to 1.61.0.
+# Symptom: every request 500s with
+#   TypeError: GZipResponder.__init__() missing 1 required keyword-only argument: 'thread_minimum_size'
+# Remove this pin once streamlit passes thread_minimum_size through.
+starlette<1.4
 pandas
 python-docx
 fpdf2
