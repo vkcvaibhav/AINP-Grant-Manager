@@ -276,12 +276,6 @@
             "head": "Pay and Allowances",
             "detail": "Deva salary",
             "amount": 70760.0
-        },
-        {
-            "date": "2026-08-01",
-            "head": "Pay and Allowances",
-            "detail": "Two Farm labour: 16/07/2026 to 31/07/2026, Nagin bhai and saileshbhai ",
-            "amount": 9522.0
         }
     ],
     "latest_quarter": "Initial Allocation",
