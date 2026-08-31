@@ -276,6 +276,12 @@
             "head": "Pay and Allowances",
             "detail": "Deva salary",
             "amount": 70760.0
+        },
+        {
+            "date": "2026-08-01",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Farm labour: 01/07/2026 to 15/07/2026",
+            "amount": 9522.0
         }
     ],
     "latest_quarter": "Initial Allocation",
