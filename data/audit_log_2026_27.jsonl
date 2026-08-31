@@ -12,3 +12,4 @@
 {"timestamp": "2026-08-04T09:29:08", "financial_year": "2026-27", "action": "installment_add", "details": {"pfms_id": "C072647563242, C072647575860, C072647709902", "amount": 775000.0}}
 {"timestamp": "2026-08-31T05:22:59", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-08-01", "head": "Pay and Allowances", "amount": 9522.0}}
 {"timestamp": "2026-08-31T05:25:50", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-08-01", "head": "Pay and Allowances", "amount": 9522.0}}
+{"timestamp": "2026-08-31T05:26:13", "financial_year": "2026-27", "action": "expenditure_delete", "details": {"date": "2026-08-01", "head": "Pay and Allowances", "amount": 9522.0}}
