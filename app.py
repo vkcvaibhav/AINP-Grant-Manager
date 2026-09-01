@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import base64
 import json
 import pandas as pd
 from datetime import datetime, date
@@ -65,7 +66,93 @@ genai_client = genai.Client(api_key=api_key) if api_key else None
 # Load Logos if exist
 NAU_LOGO = 'logos/nau_logo.png' if os.path.exists('logos/nau_logo.png') else None
 ICAR_LOGO = 'logos/icar_logo.png' if os.path.exists('logos/icar_logo.png') else None
-GUJARATI_FONT = 'fonts/NotoSansGujarati-Regular.ttf'
+GUJARATI_FONT = 'fonts/SHREE0768.TTF'
+GUJARATI_FALLBACK_FONT = 'fonts/NotoSansGujarati-Regular.ttf'
+GUJARATI_FONT_FAMILY = 'AINP SHREE Gujarati'
+GUJARATI_FALLBACK_FONT_FAMILY = 'AINP Noto Sans Gujarati'
+DOCX_GUJARATI_FONT_FAMILY = 'SHREE_GUJ_OTF_0768'
+
+
+@st.cache_data(show_spinner=False)
+def font_data_uri(font_path, modified_ns):
+    """Return an embeddable font URL; modified_ns invalidates stale cached fonts."""
+    del modified_ns
+    with open(font_path, "rb") as font_file:
+        encoded_font = base64.b64encode(font_file.read()).decode("ascii")
+    return f"data:font/ttf;base64,{encoded_font}"
+
+
+def apply_app_typography():
+    """Load the requested Gujarati font and a bundled, Unicode-complete fallback."""
+    font_faces = []
+    if os.path.exists(GUJARATI_FONT):
+        primary_uri = font_data_uri(GUJARATI_FONT, os.stat(GUJARATI_FONT).st_mtime_ns)
+        font_faces.append(f"""
+            @font-face {{
+                font-family: '{GUJARATI_FONT_FAMILY}';
+                src: url('{primary_uri}') format('truetype');
+                font-style: normal;
+                font-weight: 400;
+                font-display: swap;
+                unicode-range: U+0A80-0AFF;
+            }}
+        """)
+    if os.path.exists(GUJARATI_FALLBACK_FONT):
+        fallback_uri = font_data_uri(
+            GUJARATI_FALLBACK_FONT,
+            os.stat(GUJARATI_FALLBACK_FONT).st_mtime_ns,
+        )
+        font_faces.append(f"""
+            @font-face {{
+                font-family: '{GUJARATI_FALLBACK_FONT_FAMILY}';
+                src: url('{fallback_uri}') format('truetype');
+                font-style: normal;
+                font-weight: 400;
+                font-display: swap;
+                unicode-range: U+0A80-0AFF;
+            }}
+        """)
+
+    # Nirmala UI and Shruti cover Gujarati on common Windows installations if
+    # neither repository font is available for any reason.
+    font_stack = (
+        f"'{GUJARATI_FONT_FAMILY}', '{GUJARATI_FALLBACK_FONT_FAMILY}', "
+        "'Source Sans', 'Nirmala UI', 'Shruti', Arial, sans-serif"
+    )
+    st.markdown(
+        f"""
+        <style>
+            {''.join(font_faces)}
+            :root {{ --ainp-gujarati-font-stack: {font_stack}; }}
+            .stApp,
+            .stApp button,
+            .stApp input,
+            .stApp textarea,
+            .stApp select,
+            .stApp [role="button"],
+            .stApp [role="tab"],
+            .stApp [data-baseweb] {{
+                font-family: var(--ainp-gujarati-font-stack) !important;
+            }}
+            .stApp code,
+            .stApp pre,
+            .stApp kbd {{
+                font-family: ui-monospace, SFMono-Regular, Consolas, monospace !important;
+            }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def apply_docx_gujarati_font(style):
+    """Use SHREE for complex-script text while retaining a standard Latin face."""
+    style.font.name = 'Arial'
+    run_properties = style.element.get_or_add_rPr()
+    run_fonts = run_properties.get_or_add_rFonts()
+    for script in ("ascii", "hAnsi", "eastAsia"):
+        run_fonts.set(qn(f"w:{script}"), 'Arial')
+    run_fonts.set(qn("w:cs"), DOCX_GUJARATI_FONT_FAMILY)
 
 # Define standard Heads
 BUDGET_HEADS = [
@@ -683,6 +770,7 @@ def generate_comptroller_docx(ref_no, letter_date, body_text, amt_words, pay_amt
         
     # Strip default spacing to ensure tables pack tightly together
     style = doc.styles['Normal']
+    apply_docx_gujarati_font(style)
     style.font.size = Pt(12)
     style.paragraph_format.space_after = Pt(0)
     style.paragraph_format.space_before = Pt(0)
@@ -1153,6 +1241,7 @@ def generate_auc_forwarding_docx(ref_no, letter_date, subject_text, body_text):
         section.right_margin = Inches(0.8)
         
     style = doc.styles['Normal']
+    apply_docx_gujarati_font(style)
     style.font.size = Pt(12)
     style.paragraph_format.space_after = Pt(0)
     style.paragraph_format.space_before = Pt(0)
@@ -1393,6 +1482,7 @@ def generate_auc_certificate(inst_data, t1_data, t2_data, cert_text_1, fy_string
 # --- 3. THE UI APPLICATION ---
 
 def main():
+    apply_app_typography()
     st.title("🌾 AINP Grant Management System - NAU Navsari")
     
     current_year = datetime.now().year
@@ -1930,7 +2020,8 @@ def main():
             total_amt = edited_df["Amount (₹)"].astype(float).sum()
             st.markdown(f"**Total Installment Amount:** ₹{total_amt:,.2f}")
             
-            col_save, col_cancel = st.columns([1, 4])
+            # Keep the action row at the requested 40/60 split.
+            col_save, col_cancel = st.columns([2, 3])
             with col_save:
                 if st.button("💾 Save Installment"):
                     final_heads = {row["Budget Head"]: float(row["Amount (₹)"]) for _, row in edited_df.iterrows()}
@@ -2113,7 +2204,7 @@ def main():
             st.markdown("""
             <style>
                 .block-container { padding-top: 2rem; padding-bottom: 2rem; background-color: #ffffff; }
-                .letter-body { font-family: 'Arial', sans-serif; font-size: 16px; color: #000000; line-height: 1.5; }
+                .letter-body { font-family: var(--ainp-gujarati-font-stack); font-size: 16px; color: #000000; line-height: 1.5; }
                 .bold { font-weight: bold; }
                 .center { text-align: center; }
                 .right { text-align: right; }
