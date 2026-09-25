@@ -38,7 +38,7 @@
         {
             "date": "2026-04-16",
             "quarter": "Q1",
-            "installment_num": "March 2026",
+            "installment_num": "I",
             "purpose": "GIA-Salary",
             "pfms_id": "IDIBR52026041601672704",
             "amount": 250000.0,
@@ -49,7 +49,7 @@
                 "Non-Recurring Contingencies (Equipments/Works)": 0.0,
                 "TSP": 0.0
             },
-            "type": "March 2026",
+            "type": "I",
             "available": true,
             "comptroller_order_uploaded": true,
             "comptroller_order_file": "2026-27_Comptroller_Order_20260925120806.pdf"
