@@ -37,3 +37,4 @@
 {"timestamp": "2026-09-25T12:25:37", "financial_year": "2026-27", "action": "installment_edit", "details": {"pfms_id": "STATE_MATCH_IDIBR52026041601672704", "amount": 62500.0}}
 {"timestamp": "2026-09-25T12:38:13", "financial_year": "2026-27", "action": "installment_edit", "details": {"pfms_id": "STATE_MATCH_C062609856145", "amount": 133333.33}}
 {"timestamp": "2026-09-25T12:38:40", "financial_year": "2026-27", "action": "installment_edit", "details": {"pfms_id": "STATE_MATCH_IDIBR52026041601672704", "amount": 83333.34}}
+{"timestamp": "2026-09-25T12:44:23", "financial_year": "2026-27", "action": "fund_activation", "details": {"activated_pfms_ids": [], "state_share_records": [], "order_file": "2026-27_Comptroller_Order_20260925124418.pdf"}}
