@@ -148,24 +148,6 @@
             "comptroller_order_uploaded": true,
             "source_pfms_id": "IDIBR52026041601672704",
             "comptroller_order_file": "2026-27_Comptroller_Order_20260925120806.pdf"
-        },
-        {
-            "date": "2026-04-08",
-            "quarter": "Q1",
-            "installment_num": "I",
-            "purpose": "GIA-Salary",
-            "pfms_id": "STATE_MATCH_",
-            "amount": 250000.0,
-            "heads": {
-                "Pay and Allowances": 250000.0,
-                "Travelling Allowances (TA)": 0.0,
-                "Other Recurring Contingencies (ORC)": 0.0,
-                "Non-Recurring Contingencies (Equipments/Works)": 0.0,
-                "TSP": 0.0
-            },
-            "type": "I",
-            "available": false,
-            "comptroller_order_uploaded": false
         }
     ],
     "expenditure": [
