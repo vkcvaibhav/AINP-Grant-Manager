@@ -104,8 +104,9 @@
                 "TSP": 0.0
             },
             "type": "III",
-            "available": false,
-            "comptroller_order_uploaded": false
+            "available": true,
+            "comptroller_order_uploaded": true,
+            "comptroller_order_file": "2026-27_Comptroller_Order_20260925111120.pdf"
         },
         {
             "date": "2026-07-31",
@@ -124,6 +125,26 @@
             "type": "IV, V",
             "available": false,
             "comptroller_order_uploaded": false
+        },
+        {
+            "date": "2026-09-25",
+            "quarter": "Q1",
+            "installment_num": "III (State Share)",
+            "purpose": "State Share 25%",
+            "pfms_id": "STATE_MATCH_C062609856145",
+            "amount": 133333.33,
+            "heads": {
+                "Pay and Allowances": 133333.33,
+                "Travelling Allowances (TA)": 0.0,
+                "Other Recurring Contingencies (ORC)": 0.0,
+                "Non-Recurring Contingencies (Equipments/Works)": 0.0,
+                "TSP": 0.0
+            },
+            "type": "III (State Share)",
+            "available": true,
+            "comptroller_order_uploaded": true,
+            "source_pfms_id": "C062609856145",
+            "comptroller_order_file": "2026-27_Comptroller_Order_20260925111120.pdf"
         }
     ],
     "expenditure": [
