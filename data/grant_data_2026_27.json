@@ -54,24 +54,6 @@
             "comptroller_order_uploaded": true
         },
         {
-            "date": "2026-05-19",
-            "quarter": "Q1",
-            "installment_num": "I (State Share)",
-            "purpose": "State Share 25%",
-            "pfms_id": "STATE_MATCH_IDIBR52026041601672704",
-            "amount": 83333.33,
-            "heads": {
-                "Pay and Allowances": 83333.33,
-                "Travelling Allowances (TA)": 0.0,
-                "Other Recurring Contingencies (ORC)": 0.0,
-                "Non-Recurring Contingencies (Equipments/Works)": 0.0,
-                "TSP": 0.0
-            },
-            "type": "I (State Share)",
-            "available": true,
-            "comptroller_order_uploaded": true
-        },
-        {
             "date": "2026-05-27",
             "quarter": "Q1",
             "installment_num": "II",
