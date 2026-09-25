@@ -148,6 +148,24 @@
             "comptroller_order_uploaded": true,
             "source_pfms_id": "IDIBR52026041601672704",
             "comptroller_order_file": "2026-27_Comptroller_Order_20260925120806.pdf"
+        },
+        {
+            "date": "2026-08-08",
+            "quarter": "Q2",
+            "installment_num": "II",
+            "purpose": "State Share 25%",
+            "pfms_id": "STATE_MATCH_C052624881622",
+            "amount": 33333.33,
+            "heads": {
+                "Pay and Allowances": 33333.33,
+                "Travelling Allowances (TA)": 0.0,
+                "Other Recurring Contingencies (ORC)": 0.0,
+                "Non-Recurring Contingencies (Equipments/Works)": 0.0,
+                "TSP": 0.0
+            },
+            "type": "II",
+            "available": false,
+            "comptroller_order_uploaded": false
         }
     ],
     "expenditure": [
