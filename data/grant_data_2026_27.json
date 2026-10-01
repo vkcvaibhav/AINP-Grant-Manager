@@ -411,6 +411,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "CHitosan 25 gm 1 box ",
             "amount": 1800.0
+        },
+        {
+            "date": "2026-09-28",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Mite collection stand ",
+            "amount": 1600.0
         }
     ],
     "latest_quarter": "Initial Allocation",
