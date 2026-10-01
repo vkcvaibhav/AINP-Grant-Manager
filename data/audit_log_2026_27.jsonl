@@ -85,3 +85,4 @@
 {"timestamp": "2026-10-01T11:48:25", "financial_year": "2026-27", "action": "installment_edit", "details": {"pfms_id": "STATE_MATCH_IDIBR52026041601672704", "amount": 33333.33}}
 {"timestamp": "2026-10-01T11:49:06", "financial_year": "2026-27", "action": "installment_edit", "details": {"pfms_id": "STATE_MATCH_C062609856145", "amount": 216666.66}}
 {"timestamp": "2026-10-01T12:06:39", "financial_year": "2026-27", "action": "expenditure_delete", "details": {"date": "2026-10-01", "head": "Other Recurring Contingencies (ORC)", "amount": 119.0}}
+{"timestamp": "2026-10-01T12:08:28", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-09-28", "head": "Other Recurring Contingencies (ORC)", "amount": 1800.0}}
