@@ -81,3 +81,4 @@
 {"timestamp": "2026-10-01T11:42:46", "financial_year": "2026-27", "action": "installment_edit", "details": {"pfms_id": "STATE_MATCH_IDIBR52026041601672704", "amount": 33333.33}}
 {"timestamp": "2026-10-01T11:43:04", "financial_year": "2026-27", "action": "installment_edit", "details": {"pfms_id": "C072647563242, C072647575860, C072647709902", "amount": 775000.0}}
 {"timestamp": "2026-10-01T11:43:22", "financial_year": "2026-27", "action": "installment_edit", "details": {"pfms_id": "STATE_MATCH_C072647563242, C072647575860, C072647709902", "amount": 208333.33}}
+{"timestamp": "2026-10-01T11:45:04", "financial_year": "2026-27", "action": "installment_edit", "details": {"pfms_id": "STATE_MATCH_IDIBR52026041601672704", "amount": 249999.99}}
