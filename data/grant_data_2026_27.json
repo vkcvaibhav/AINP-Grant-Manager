@@ -417,6 +417,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Two Farm labour: 16/09/2026 to 31/09/2026 Naginbhai and Saileshbhai",
             "amount": 8280.0
+        },
+        {
+            "date": "2026-09-16",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Two Farm labour: 01/08/2026 to 15/08/2026 Naginbhai and Saileshbhai",
+            "amount": 7038.0
         }
     ],
     "latest_quarter": "Initial Allocation",
