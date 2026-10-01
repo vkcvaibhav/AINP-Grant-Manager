@@ -399,12 +399,6 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Cryo vial1.8ml (1000 nos.) Box 1",
             "amount": 5000.0
-        },
-        {
-            "date": "2026-09-09",
-            "head": "Other Recurring Contingencies (ORC)",
-            "detail": "Chitosan 25 gm 1 box, 496",
-            "amount": 1800.0
         }
     ],
     "latest_quarter": "Initial Allocation",
