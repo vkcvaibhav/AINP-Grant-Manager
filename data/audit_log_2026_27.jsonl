@@ -45,3 +45,4 @@
 {"timestamp": "2026-10-01T10:03:01", "financial_year": "2026-27", "action": "fund_activation", "details": {"activated_pfms_ids": ["C072647563242, C072647575860, C072647709902"], "state_share_records": ["STATE_MATCH_C072647563242, C072647575860, C072647709902"], "order_file": "2026-27_Comptroller_Order_20261001100256.pdf"}}
 {"timestamp": "2026-10-01T10:08:16", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-09-03", "head": "Other Recurring Contingencies (ORC)", "amount": 2832.0}}
 {"timestamp": "2026-10-01T10:11:52", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-09-14", "head": "Other Recurring Contingencies (ORC)", "amount": 2000.0}}
+{"timestamp": "2026-10-01T10:13:00", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-09-16", "head": "Other Recurring Contingencies (ORC)", "amount": 7038.0}}
