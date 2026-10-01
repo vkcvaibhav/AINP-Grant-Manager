@@ -357,6 +357,12 @@
             "head": "Pay and Allowances",
             "detail": "Deva salary",
             "amount": 70760.0
+        },
+        {
+            "date": "2026-09-03",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Sanger sequencing COI gene sequencing ",
+            "amount": 2832.0
         }
     ],
     "latest_quarter": "Initial Allocation",
