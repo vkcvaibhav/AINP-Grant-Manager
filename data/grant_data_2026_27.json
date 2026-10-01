@@ -381,6 +381,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Polyhouse ligth bill 01/09/2026 to 30/09/2026 , ligth bill: 06632000371",
             "amount": 119.0
+        },
+        {
+            "date": "2026-09-24",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Diesel bill, 3137",
+            "amount": 4600.0
         }
     ],
     "latest_quarter": "Initial Allocation",
