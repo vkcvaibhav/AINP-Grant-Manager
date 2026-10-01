@@ -393,6 +393,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Diesel Bill",
             "amount": 4600.0
+        },
+        {
+            "date": "2026-09-28",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Diesel Bill 4450/24/09/2026",
+            "amount": 400.0
         }
     ],
     "latest_quarter": "Initial Allocation",
