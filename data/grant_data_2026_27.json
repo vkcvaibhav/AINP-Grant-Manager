@@ -116,9 +116,9 @@
             "installment_num": "III (State Share)",
             "purpose": "State Share 25%",
             "pfms_id": "STATE_MATCH_C062609856145",
-            "amount": 133333.33,
+            "amount": 216666.66,
             "heads": {
-                "Pay and Allowances": 133333.33,
+                "Pay and Allowances": 216666.66,
                 "Travelling Allowances (TA)": 0.0,
                 "Other Recurring Contingencies (ORC)": 0.0,
                 "Non-Recurring Contingencies (Equipments/Works)": 0.0,
