@@ -103,3 +103,4 @@
 {"timestamp": "2026-11-02T03:25:21", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-11-02", "head": "Other Recurring Contingencies (ORC)", "amount": 4980.0}}
 {"timestamp": "2026-11-02T03:29:09", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-11-02", "head": "Other Recurring Contingencies (ORC)", "amount": 24500.0}}
 {"timestamp": "2026-11-02T03:32:41", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-11-02", "head": "Other Recurring Contingencies (ORC)", "amount": 8694.0}}
+{"timestamp": "2026-11-02T03:33:16", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-10-20", "head": "Pay and Allowances", "amount": 79.0}}
