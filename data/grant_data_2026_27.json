@@ -453,6 +453,12 @@
             "head": "Pay and Allowances",
             "detail": "Booke small (6 nos) and big  (2 nos)",
             "amount": 750.0
+        },
+        {
+            "date": "2026-10-05",
+            "head": "Pay and Allowances",
+            "detail": "Tea and food  visit PC",
+            "amount": 3165.0
         }
     ],
     "latest_quarter": "Initial Allocation",
