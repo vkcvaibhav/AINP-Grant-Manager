@@ -441,6 +441,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Momento visit 2 nos ",
             "amount": 1400.0
+        },
+        {
+            "date": "2026-10-05",
+            "head": "Pay and Allowances",
+            "detail": "Guava nector ",
+            "amount": 500.0
         }
     ],
     "latest_quarter": "Initial Allocation",
