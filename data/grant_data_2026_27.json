@@ -519,6 +519,12 @@
             "head": "Pay and Allowances",
             "detail": "Dr. Vaibhav Salary",
             "amount": 135064.0
+        },
+        {
+            "date": "2026-10-05",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Stationery PC visit ",
+            "amount": 1151.0
         }
     ],
     "latest_quarter": "Initial Allocation",
