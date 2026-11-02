@@ -519,6 +519,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "ligth bill 06632000371",
             "amount": 79.0
+        },
+        {
+            "date": "2026-10-22",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "herbicide and pesticides ",
+            "amount": 4580.0
         }
     ],
     "latest_quarter": "Initial Allocation",
