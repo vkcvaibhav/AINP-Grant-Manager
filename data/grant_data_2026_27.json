@@ -447,12 +447,6 @@
             "head": "Pay and Allowances",
             "detail": "Booke small (6 nos) and big  (2 nos)",
             "amount": 750.0
-        },
-        {
-            "date": "2026-10-05",
-            "head": "Pay and Allowances",
-            "detail": "Stationery purchase for visit of project coordinator ",
-            "amount": 1151.0
         }
     ],
     "latest_quarter": "Initial Allocation",
