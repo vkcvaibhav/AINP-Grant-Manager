@@ -447,6 +447,12 @@
             "head": "Pay and Allowances",
             "detail": "Guava nector ",
             "amount": 500.0
+        },
+        {
+            "date": "2026-11-05",
+            "head": "Pay and Allowances",
+            "detail": "Booke small (6 nos) and big  (2 nos)",
+            "amount": 750.0
         }
     ],
     "latest_quarter": "Initial Allocation",
