@@ -93,3 +93,4 @@
 {"timestamp": "2026-11-02T03:18:48", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-10-05", "head": "Pay and Allowances", "amount": 3165.0}}
 {"timestamp": "2026-11-02T03:19:39", "financial_year": "2026-27", "action": "expenditure_add", "details": {"date": "2026-10-05", "head": "Pay and Allowances", "amount": 1151.0}}
 {"timestamp": "2026-11-02T03:20:34", "financial_year": "2026-27", "action": "expenditure_delete", "details": {"date": "2026-10-05", "head": "Pay and Allowances", "amount": 500.0}}
+{"timestamp": "2026-11-02T03:20:58", "financial_year": "2026-27", "action": "expenditure_delete", "details": {"date": "2026-10-05", "head": "Pay and Allowances", "amount": 3165.0}}
