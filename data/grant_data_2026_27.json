@@ -459,6 +459,12 @@
             "head": "Pay and Allowances",
             "detail": "Tea and food  visit PC",
             "amount": 3165.0
+        },
+        {
+            "date": "2026-10-05",
+            "head": "Pay and Allowances",
+            "detail": "Stationery purchase for visit of project coordinator ",
+            "amount": 1151.0
         }
     ],
     "latest_quarter": "Initial Allocation",
