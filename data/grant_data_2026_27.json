@@ -507,6 +507,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Own fiber reinforced flower pot (50 nos)",
             "amount": 24500.0
+        },
+        {
+            "date": "2026-10-16",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Two Farm labour: 01/10/2026 to 15/10/2026 Naginbhai and Saileshbhai",
+            "amount": 8694.0
         }
     ],
     "latest_quarter": "Initial Allocation",
