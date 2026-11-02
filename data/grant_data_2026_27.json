@@ -495,6 +495,12 @@
             "head": "Other Recurring Contingencies (ORC)",
             "detail": "Two Farm labour: 01/10/2026 to 15/10/2026 Naginbhai and Saileshbhai",
             "amount": 8694.0
+        },
+        {
+            "date": "2026-11-02",
+            "head": "Other Recurring Contingencies (ORC)",
+            "detail": "Lb stool (2 nos)",
+            "amount": 4980.0
         }
     ],
     "latest_quarter": "Initial Allocation",
