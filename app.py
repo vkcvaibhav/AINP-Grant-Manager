@@ -6,6 +6,7 @@ import pandas as pd
 from datetime import datetime, date
 import calendar
 import io
+import inspect
 import mimetypes
 import re
 import tempfile
@@ -25,7 +26,19 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.enum.section import WD_ORIENTATION
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
-from fpdf import FPDF, XPos, YPos
+from fpdf import FPDF
+
+try:
+    # fpdf2 exposes positioning enums; the legacy ``fpdf`` package does not.
+    from fpdf.enums import XPos, YPos
+except ImportError:
+    XPos = YPos = None
+
+# Environments that once had both distributions installed can retain the
+# fpdf2 enums while resolving the legacy FPDF class. Detect the actual method
+# signature instead of assuming the imported modules belong to one version.
+if "new_x" not in inspect.signature(FPDF.cell).parameters:
+    XPos = YPos = None
 from github import Github, GithubException, UnknownObjectException  # <-- Added for GitHub backups
 
 # --- 1. CONFIGURATION & SETUP ---
@@ -52,7 +65,8 @@ def get_secret_value(*names, default=""):
     return default
 
 DEFAULT_GITHUB_REPO = "vkcvaibhav/AINP-Grant-Manager"
-GEMINI_HEAVY_MODEL = get_secret_value("GEMINI_HEAVY_MODEL", "GEMINI_PRO_MODEL", "GEMINI_MAIN_MODEL", default="gemini-3.1-pro-preview")
+GEMINI_HEAVY_MODEL = get_secret_value("GEMINI_HEAVY_MODEL", "GEMINI_PRO_MODEL", "GEMINI_MAIN_MODEL", default="gemini-3.8-flash")
+GEMINI_HEAVY_FALLBACK_MODELS = ("gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash")
 GEMINI_CHAT_MODEL = get_secret_value("GEMINI_CHAT_MODEL", default="gemini-3.5-flash")
 GEMINI_FAST_MODEL = get_secret_value("GEMINI_FAST_MODEL", default="gemini-3.1-flash-lite")
 GEMINI_EMBEDDING_MODEL = get_secret_value("GEMINI_EMBEDDING_MODEL", default="models/gemini-embedding-2")
@@ -448,12 +462,32 @@ def preview_restore_json(uploaded_file, fy):
 
 
 def pdf_to_bytes(pdf):
-    raw = pdf.output()
+    if XPos is None:
+        # Legacy PyFPDF writes to stdout when output() has no destination.
+        raw = pdf.output(dest="S")
+    else:
+        raw = pdf.output()
     if isinstance(raw, bytearray):
         return bytes(raw)
     if isinstance(raw, bytes):
         return raw
     return raw.encode("latin-1")
+
+
+def write_pdf_cell(pdf, width, height, text, border=0, align="", next_line=False):
+    """Write a cell with either the fpdf2 or legacy PyFPDF positioning API."""
+    if XPos is None:
+        pdf.cell(width, height, text, border=border, ln=int(next_line), align=align)
+        return
+    pdf.cell(
+        width,
+        height,
+        text,
+        border=border,
+        new_x=XPos.LMARGIN if next_line else XPos.RIGHT,
+        new_y=YPos.NEXT if next_line else YPos.TOP,
+        align=align,
+    )
 
 
 def load_ai_knowledge():
@@ -698,19 +732,50 @@ def save_data(data, fy, audit_action=None, audit_details=None):
 
 
 # --- B. Document Processing (AI PDF Reader) ---
+def is_model_not_found_error(error):
+    """Return True only for Gemini model availability errors."""
+    code = getattr(error, "code", None)
+    status = str(getattr(error, "status", "") or "").upper()
+    message = str(getattr(error, "message", "") or error).lower()
+    return code == 404 and (status == "NOT_FOUND" or "model" in message)
+
+
+def generate_structured_content_with_fallback(contents, config):
+    """Call Gemini, retrying stable models when a configured preview is unavailable."""
+    models = list(dict.fromkeys((GEMINI_HEAVY_MODEL,) + GEMINI_HEAVY_FALLBACK_MODELS))
+    last_error = None
+    for model in models:
+        try:
+            response = genai_client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=config,
+            )
+            return response, model
+        except Exception as error:
+            if not is_model_not_found_error(error):
+                raise
+            last_error = error
+    raise last_error
+
+
 def extract_structured_with_ai(parts, prompt, schema_model):
     if genai_client is None:
         st.error("Please add GEMINI_API_KEY in Streamlit secrets to use AI extraction.")
         return None
     try:
-        response = genai_client.models.generate_content(
-            model=GEMINI_HEAVY_MODEL,
+        response, model_used = generate_structured_content_with_fallback(
             contents=[types.Part.from_text(text=prompt)] + parts,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=schema_model,
             ),
         )
+        if model_used != GEMINI_HEAVY_MODEL:
+            st.warning(
+                f"The configured Gemini model '{GEMINI_HEAVY_MODEL}' is unavailable. "
+                f"Used '{model_used}' instead. Update GEMINI_HEAVY_MODEL in Streamlit secrets."
+            )
         if response.parsed is not None:
             if isinstance(response.parsed, BaseModel):
                 return response.parsed.model_dump(by_alias=True)
@@ -2575,33 +2640,27 @@ def main():
                         pdf = FPDF(orientation='L')
                         pdf.add_page()
                         pdf.set_font("Helvetica", 'B', 14)
-                        pdf.cell(
-                            0,
-                            10,
-                            f"Expenditure Log - {selected_log_head} (FY {selected_fy})",
-                            new_x=XPos.LMARGIN,
-                            new_y=YPos.NEXT,
-                            align='C',
-                        )
+                        title = f"Expenditure Log - {selected_log_head} (FY {selected_fy})"
+                        write_pdf_cell(pdf, 0, 10, title, align='C', next_line=True)
                         pdf.ln(5)
                         
                         pdf.set_font("Helvetica", 'B', 10)
                         cols = [25, 60, 30, 35, 125]
                         headers = ["Date", "Budget Head", "Amount", "Prog. Total", "Details"]
                         for i, h in enumerate(headers):
-                            pdf.cell(cols[i], 10, h, border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C')
+                            write_pdf_cell(pdf, cols[i], 10, h, border=1, align='C')
                         pdf.ln()
                         
                         pdf.set_font("Helvetica", '', 10)
                         for _, r in df_yearly_log.iterrows():
-                            pdf.cell(cols[0], 10, str(r['date']), border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C')
-                            pdf.cell(cols[1], 10, str(r['head'])[:30], border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='L')
-                            pdf.cell(cols[2], 10, f"{float(r['amount']):,.2f}", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='R')
-                            pdf.cell(cols[3], 10, f"{float(r['progressive_total']):,.2f}", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='R')
+                            write_pdf_cell(pdf, cols[0], 10, str(r['date']), border=1, align='C')
+                            write_pdf_cell(pdf, cols[1], 10, str(r['head'])[:30], border=1, align='L')
+                            write_pdf_cell(pdf, cols[2], 10, f"{float(r['amount']):,.2f}", border=1, align='R')
+                            write_pdf_cell(pdf, cols[3], 10, f"{float(r['progressive_total']):,.2f}", border=1, align='R')
                             
                             # Clean details to avoid PDF encoding errors (removes emojis/unsupported chars)
                             detail_txt = str(r['detail']).replace('\n', ' ').encode('latin-1', 'ignore').decode('latin-1')[:75]
-                            pdf.cell(cols[4], 10, detail_txt, border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='L')
+                            write_pdf_cell(pdf, cols[4], 10, detail_txt, border=1, align='L')
                             pdf.ln()
                             
                         st.download_button(
