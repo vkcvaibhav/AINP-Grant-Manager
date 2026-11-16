@@ -187,6 +187,24 @@
             "type": "VI",
             "available": false,
             "comptroller_order_uploaded": false
+        },
+        {
+            "date": "2026-11-12",
+            "quarter": "Q3",
+            "installment_num": "VI",
+            "purpose": "GIA-General",
+            "pfms_id": "C112617691707",
+            "amount": 500000.0,
+            "heads": {
+                "Pay and Allowances": 500000.0,
+                "Travelling Allowances (TA)": 0.0,
+                "Other Recurring Contingencies (ORC)": 0.0,
+                "Non-Recurring Contingencies (Equipments/Works)": 0.0,
+                "TSP": 0.0
+            },
+            "type": "VI",
+            "available": false,
+            "comptroller_order_uploaded": false
         }
     ],
     "expenditure": [
