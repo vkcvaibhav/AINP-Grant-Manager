@@ -2,24 +2,24 @@
     "financial_year": "2026-27",
     "allocation": {
         "Pay and Allowances": {
-            "icar": 0.0,
-            "state": 0.0,
-            "total": 0.0
+            "icar": 1857000.0,
+            "state": 619000.0,
+            "total": 2476000.0
         },
         "Travelling Allowances (TA)": {
-            "icar": 0.0,
-            "state": 0.0,
-            "total": 0.0
+            "icar": 20250.0,
+            "state": 6750.0,
+            "total": 27000.0
         },
         "Other Recurring Contingencies (ORC)": {
-            "icar": 46875.0,
-            "state": 15625.0,
-            "total": 62500.0
+            "icar": 401250.0,
+            "state": 133750.0,
+            "total": 535000.0
         },
         "Non-Recurring Contingencies (Equipments/Works)": {
-            "icar": 0.0,
-            "state": 0.0,
-            "total": 0.0
+            "icar": 550500.0,
+            "state": 183500.0,
+            "total": 734000.0
         },
         "TSP": {
             "icar": 0.0,
@@ -570,7 +570,7 @@
         }
     ],
     "latest_quarter": "Initial Allocation",
-    "latest_date": "2026-11-12",
+    "latest_date": "2026-07-28",
     "opening_balances": {
         "Establishment Charges": -370662.1,
         "TA": 0.0,
